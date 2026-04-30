@@ -17,3 +17,8 @@ pulumi/venv/
 pulumi/__pycache__/
 pulumi/.pulumi/
 pulumi/Pulumi.dev.yaml
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key
