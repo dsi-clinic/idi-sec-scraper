@@ -2,7 +2,6 @@
 
 # Standard library imports
 import contextlib
-import json
 import logging
 import threading
 import time
@@ -221,7 +220,7 @@ class ApiClient(ABC):
 class SecClient(ApiClient):
     """API client for the SEC EDGAR archive, with built-in rate limiting."""
 
-    SEC_HEADERS = {"User-Agent": "Nicole Tebaldi ntebaldi@uchicago.edu"}
+    SEC_HEADERS = {"User-Agent": "Alice Duan aliceduan@uchicago.edu"}
     SEC_URL = "https://www.sec.gov/Archives/edgar/data"
 
     def __init__(self, rate_limit: float = 0.2) -> None:
@@ -246,10 +245,12 @@ class SecClient(ApiClient):
             Dict with ``status_code``, ``url``, and ``data`` on success, plus ``error``
             on failure.
         """
-        return self._query_with_error_handling(
+        self.rate_limit()
+        response = self._query_with_error_handling(
             url=sec_url,
             headers=self.SEC_HEADERS,
             method="get",
             return_json=return_json,
             return_bytes=return_bytes,
         )
+        return response
