@@ -1,0 +1,42 @@
+form_types:
+  10-K:
+    match: '10-?K'
+    documents:
+      - all_of:
+          - field: type
+            operator: regex
+            value: '^EX-21'
+
+  20-F:
+    match: '20-?F'
+    documents:
+      - all_of:
+          - field: type
+            operator: regex
+            value: '^EX-8'
+
+  8-K:
+    match: '8-K'
+    documents:
+      - all_of:
+          - field: description
+            operator: exact
+            value: "Complete submission text file"
+
+  13F-HR:
+    match: '13F-HR'
+    documents:
+      - all_of:
+          - field: type
+            operator: exact
+            value: "INFORMATION TABLE"
+          - field: filename
+            operator: regex
+            value: '(?i).*\.html$'
+      - all_of:
+          - field: type
+            operator: regex
+            value: '^13F-HR'
+          - field: filename
+            operator: regex
+            value: '(?i).*\.html$'
