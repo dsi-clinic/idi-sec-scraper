@@ -249,6 +249,98 @@ Every filing directory contains a `manifest.json` written after scraping. This i
 
 ---
 
+## Consuming data from S3
+
+The S3 key structure encodes the filing date and form type, so consumers can scope their reads to exactly the dates and form types they care about without scanning the whole bucket. The key structure is:
+
+```
+s3://<bucket>/<YYYY-MM-DD>/<form-type>/<cik>/<accession>/manifest.json
+```
+
+For each filing directory, read `manifest.json` first. Skip any filing where `failure_reason` is non-empty — its `documents` list will be empty. The `documents[].s3_key` fields give ready-to-use `s3://` paths to every downloaded file.
+
+**Note on form-type matching:** S3 prefix listing is exact — there is no regex or glob support. Amended forms are stored under a separate prefix (e.g. `10-K/A` is stored as `10-K_A` because slashes are sanitized to underscores in S3 keys). To cover multiple variants, pass a list of prefixes and `iter_manifests` will union the results. If this becomes unergonomic, we can plug in DuckDB which has native S3 glob support.
+
+To get all manifests for a date range and form type:
+
+```python
+import boto3, json
+from datetime import date, timedelta
+
+s3 = boto3.client("s3")
+bucket = "idi-sec-scraper"
+
+def iter_manifests(form_types: str | list[str], start: date, end: date):
+    """Yield parsed manifest dicts for each form type prefix over the date range."""
+    if isinstance(form_types, str):
+        form_types = [form_types]
+    day = start
+    while day <= end:
+        for form_type in form_types:
+            prefix = f"{day}/{form_type}/"
+            paginator = s3.get_paginator("list_objects_v2")
+            for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+                for obj in page.get("Contents", []):
+                    if obj["Key"].endswith("/manifest.json"):
+                        body = s3.get_object(Bucket=bucket, Key=obj["Key"])["Body"].read()
+                        yield json.loads(body)
+        day += timedelta(days=1)
+```
+
+### Corporate structure processor
+
+Interested in **EX-21** (subsidiary lists) from `10-K` and `10-K_A` filings and **EX-8** from `20-F` and `20-F_A` filings.
+
+List by date prefix and form type, then read each manifest to get the exact document paths:
+
+```python
+for manifest in iter_manifests(["10-K", "10-K_A"], start=date(2024, 1, 1), end=date(2024, 12, 31)):
+    if manifest["failure_reason"]:
+        continue
+    for doc in manifest["documents"]:
+        # All documents on a 10-K are EX-21.x by filter config
+        print(manifest["cik"], manifest["filing_date"], doc["s3_key"])
+
+# Same pattern for 20-F / EX-8 (include amended 20-F_A)
+for manifest in iter_manifests(["20-F", "20-F_A"], start=date(2024, 1, 1), end=date(2024, 12, 31)):
+    if manifest["failure_reason"]:
+        continue
+    for doc in manifest["documents"]:
+        print(manifest["cik"], manifest["filing_date"], doc["s3_key"])
+```
+
+`report_date` on the manifest is the period the annual report covers, which may differ from `filing_date` by several months. Use `report_date` when aligning subsidiary snapshots to a fiscal year.
+
+### Shareholder tracker
+
+Interested in the information-table HTML from **13F-HR** filings (one per institutional manager per quarter).
+
+The form-type prefix is `13F-HR`. Each filing will have one or two documents: the information table HTML and optionally the cover-page HTML. Filter by `documents[].type` to be precise:
+
+```python
+for manifest in iter_manifests("13F-HR", start=date(2024, 1, 1), end=date(2024, 12, 31)):
+    if manifest["failure_reason"]:
+        continue
+    for doc in manifest["documents"]:
+        if doc["type"] == "INFORMATION TABLE":
+            print(manifest["cik"], manifest["report_date"], doc["s3_key"])
+```
+
+### Commercial debt tracker
+
+Interested in the **complete submission text file** from **8-K** filings (the single `.txt` that bundles all exhibits). The filter config selects this document by its description `"Complete submission text file"`.
+
+```python
+for manifest in iter_manifests("8-K", start=date(2024, 1, 1), end=date(2024, 12, 31)):
+    if manifest["failure_reason"]:
+        continue
+    for doc in manifest["documents"]:
+        # Each 8-K has exactly one document: the complete submission text
+        print(manifest["cik"], manifest["company_name"], manifest["filing_date"], doc["s3_key"])
+```
+
+---
+
 ## Development
 
 Run the test suite:
