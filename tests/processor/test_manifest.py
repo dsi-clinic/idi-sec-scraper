@@ -51,10 +51,12 @@ _FILING_NO_DOCS = ScrapedFiling(
 
 
 class TestFilingsToDf:
+    """Tests for _filings_to_df()."""
+
     def test_empty_list_returns_empty_df_with_columns(self):
-        df = _filings_to_df([])
-        assert df.empty
-        assert list(df.columns) == [
+        result = _filings_to_df([])
+        assert result.empty
+        assert list(result.columns) == [
             "cik",
             "accession_number",
             "filing_date",
@@ -68,16 +70,16 @@ class TestFilingsToDf:
         ]
 
     def test_filing_with_no_documents_produces_no_rows(self):
-        df = _filings_to_df([_FILING_NO_DOCS])
-        assert df.empty
+        result = _filings_to_df([_FILING_NO_DOCS])
+        assert result.empty
 
     def test_filing_with_documents_produces_one_row_per_document(self):
-        df = _filings_to_df([_FILING])
-        assert len(df) == 2
+        result = _filings_to_df([_FILING])
+        assert len(result) == 2
 
     def test_row_values_match_filing_and_document(self):
-        df = _filings_to_df([_FILING])
-        row = df.iloc[0]
+        result = _filings_to_df([_FILING])
+        row = result.iloc[0]
         assert row["cik"] == "320193"
         assert row["accession_number"] == "0001140361-26-006577"
         assert row["filing_date"] == "2026-02-24"
@@ -110,12 +112,14 @@ class TestFilingsToDf:
                 )
             ],
         )
-        df = _filings_to_df([_FILING, filing2])
-        assert len(df) == 3
-        assert set(df["cik"]) == {"320193", "111111"}
+        result = _filings_to_df([_FILING, filing2])
+        assert len(result) == 3
+        assert set(result["cik"]) == {"320193", "111111"}
 
 
 class TestUpdateBucketManifest:
+    """Tests for update_bucket_manifest()."""
+
     def test_noop_when_all_filings_have_no_documents(self, mocker):
         read_mock = mocker.patch("idi_sec_scraper.processor.manifest.pd.read_parquet")
         write_mock = mocker.patch("pandas.DataFrame.to_parquet")
@@ -131,7 +135,6 @@ class TestUpdateBucketManifest:
         write_mock.assert_not_called()
 
     def test_creates_new_manifest_when_none_exists(self, mocker, tmp_path):
-        manifest_path = str(tmp_path / "manifest.parquet")
         mocker.patch(
             "idi_sec_scraper.processor.manifest.pd.read_parquet",
             side_effect=FileNotFoundError,

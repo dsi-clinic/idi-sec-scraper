@@ -1056,4 +1056,3 @@ class TestProcess:
         assert len(results) == 1
         assert pipeline.stats.scraped_filings == 1
         assert pipeline.stats.skipped_filings == 0
-

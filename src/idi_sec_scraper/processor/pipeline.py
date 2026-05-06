@@ -414,7 +414,9 @@ class HistoricalSECScraperPipeline(SECScraperPipeline):
         ft_configs = list(self.document_filter_config.form_types.values())
         patterns = [ft.match for ft in ft_configs]
         cutoffs = {ft.match: ft.cutoff_date for ft in ft_configs}
-        return HistoricalDiscovery(self.sec_client, patterns, self.failure_registry, cutoffs=cutoffs)
+        return HistoricalDiscovery(
+            self.sec_client, patterns, self.failure_registry, cutoffs=cutoffs
+        )
 
     def load_input(self) -> list[DiscoveredFiling]:
         """Discover filings from the submissions.zip archive.
