@@ -699,7 +699,7 @@ class TestScrapeFiling:
         # once for index fetch, once for the document fetch
         assert pipeline.sec_client.query_endpoint.call_count == 2
 
-    def test_index_fetch_api_error_registers_failure_and_returns_none(self, mocker):
+    def test_index_fetch_api_error_returns_none_without_registering(self, mocker):
         _patch_scrape_deps(mocker)
         pipeline = _make_pipeline(
             mocker,
@@ -714,8 +714,7 @@ class TestScrapeFiling:
 
         assert result is None
         failure_key = (_FILING.cik, _FILING.accession_number)
-        assert failure_key in pipeline.failure_registry._entries
-        assert pipeline.failure_registry._reasons[failure_key] == str(FailureType.API_ERROR)
+        assert failure_key not in pipeline.failure_registry._entries
 
     def test_index_fetch_rate_limit_returns_none_without_registering(self, mocker):
         _patch_scrape_deps(mocker)
@@ -757,7 +756,7 @@ class TestScrapeFiling:
         assert failure_key not in pipeline.failure_registry._entries
         assert pipeline.stats.failed_documents == 1
 
-    def test_failed_document_fetch_registers_api_error(self, mocker):
+    def test_failed_document_fetch_does_not_register_failure(self, mocker):
         _patch_scrape_deps(mocker, docs=[_DOC])
         pipeline = _make_pipeline(
             mocker,
@@ -774,8 +773,7 @@ class TestScrapeFiling:
         pipeline._scrape_filing(_FILING)
 
         failure_key = (_FILING.cik, _FILING.accession_number)
-        assert failure_key in pipeline.failure_registry._entries
-        assert pipeline.failure_registry._reasons[failure_key] == str(FailureType.API_ERROR)
+        assert failure_key not in pipeline.failure_registry._entries
 
     def test_no_filtered_docs_registers_retryable_failure_and_returns_none(self, mocker):
         _patch_scrape_deps(mocker, docs=[])

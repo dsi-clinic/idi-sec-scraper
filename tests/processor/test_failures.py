@@ -82,9 +82,6 @@ class TestSECScraperFailureClassifier:
     def test_form_not_configured_is_non_retryable(self):
         assert not self.classifier.is_retryable(FailureType.FORM_NOT_CONFIGURED)
 
-    def test_api_error_is_non_retryable(self):
-        assert not self.classifier.is_retryable(FailureType.API_ERROR)
-
     def test_documents_missing_is_retryable(self):
         assert self.classifier.is_retryable(FailureType.DOCUMENTS_MISSING)
 
@@ -120,7 +117,6 @@ class TestSECScraperFailureClassifier:
             FailureType.MISMATCHED_LENGTHS,
             FailureType.NO_OVERFLOW_FILINGS,
             FailureType.FORM_NOT_CONFIGURED,
-            FailureType.API_ERROR,
         }
         assert expected <= self.classifier.do_not_retry
 

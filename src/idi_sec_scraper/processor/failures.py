@@ -49,7 +49,6 @@ class SECScraperFailureClassifier(FailureClassifier):
             FailureType.MISMATCHED_LENGTHS,
             FailureType.NO_OVERFLOW_FILINGS,
             FailureType.FORM_NOT_CONFIGURED,
-            FailureType.API_ERROR,
         }
     )
 
