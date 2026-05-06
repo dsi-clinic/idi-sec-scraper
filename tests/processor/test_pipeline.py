@@ -8,16 +8,16 @@ import datetime
 from idi_sec_scraper.processor.document_filters import FormTypeConfig
 from idi_sec_scraper.processor.failures import FailureType
 from idi_sec_scraper.processor.pipeline import (
-    DailyPipelineConfig,
     DailySECScraperPipeline,
-    HistoricalPipelineConfig,
     HistoricalSECScraperPipeline,
     _new_scraped_filing,
     _s3_prefix,
     _scraped_filing_from_dict,
 )
 from idi_sec_scraper.processor.types import (
+    DailyPipelineConfig,
     DiscoveredFiling,
+    HistoricalPipelineConfig,
     ParsedDocument,
     ParsedFiling,
     ScrapedDocument,

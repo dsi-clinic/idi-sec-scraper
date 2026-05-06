@@ -4,10 +4,8 @@
 import dataclasses
 import datetime
 import re
-import threading
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
 from typing import Any
 
 # Third party imports
@@ -26,7 +24,6 @@ from idi_sec_scraper.common.storage import (
 )
 from idi_sec_scraper.processor.discovery import DailyDiscovery, Discovery, HistoricalDiscovery
 from idi_sec_scraper.processor.document_filters import (
-    DocumentFilterConfig,
     find_form_type_entry,
     load_document_filters,
     select_and_filter_documents,
@@ -35,6 +32,9 @@ from idi_sec_scraper.processor.failures import FailureType, SECScraperFailureCla
 from idi_sec_scraper.processor.parser import parse_index_htm
 from idi_sec_scraper.processor.types import (
     DiscoveredFiling,
+    DocumentFilterConfig,
+    PipelineConfig,
+    PipelineStats,
     ScrapedDocument,
     ScrapedFiling,
 )
@@ -79,68 +79,6 @@ def _scraped_filing_from_dict(data: dict[str, Any]) -> ScrapedFiling:
         failure_reason=data.get("failure_reason", ""),
         documents=documents,
     )
-
-
-@dataclass
-class PipelineStats:
-    """Thread-safe counters tracking pipeline progress and failures."""
-
-    total_filings: int = 0
-    scraped_filings: int = 0
-    skipped_filings: int = 0
-    failed_filings: int = 0
-    total_documents: int = 0
-    scraped_documents: int = 0
-    skipped_documents: int = 0
-    failed_documents: int = 0
-    form_type_filings_total: dict[str, int] = field(default_factory=dict)
-    form_type_documents_total: dict[str, int] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        """Initialize the threading lock."""
-        self._lock = threading.Lock()
-
-    def increment(self, field: str, n: int = 1) -> None:
-        """Increment a stat counter by n.
-
-        Args:
-            field: Name of the counter attribute to increment.
-            n: Amount to add.
-        """
-        with self._lock:
-            setattr(self, field, getattr(self, field) + n)
-
-    def increment_form_type(self, field: str, form_type_key: str, n: int = 1) -> None:
-        """Increment a per-form-type stat counter by n."""
-        with self._lock:
-            counts = getattr(self, field)
-            counts[form_type_key] = counts.get(form_type_key, 0) + n
-
-
-@dataclass
-class PipelineConfig:
-    """Base configuration shared by all pipeline variants."""
-
-    bucket: str
-    document_filters_path: str
-    failure_file: str = ""
-    max_workers: int = 8
-
-
-@dataclass
-class HistoricalPipelineConfig(PipelineConfig):
-    """Configuration for the historical scraping pipeline."""
-
-    submissions_url: str = ""
-    max_ciks: int | None = None
-
-
-@dataclass
-class DailyPipelineConfig(PipelineConfig):
-    """Configuration for the daily scraping pipeline."""
-
-    start_date: datetime.date = field(default_factory=datetime.date.today)
-    end_date: datetime.date = field(default_factory=datetime.date.today)
 
 
 class Pipeline(ABC):

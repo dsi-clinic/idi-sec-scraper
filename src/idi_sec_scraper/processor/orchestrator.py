@@ -7,11 +7,10 @@ import datetime
 # Application imports
 from idi_sec_scraper.common.api import SecClient
 from idi_sec_scraper.processor.pipeline import (
-    DailyPipelineConfig,
     DailySECScraperPipeline,
-    HistoricalPipelineConfig,
     HistoricalSECScraperPipeline,
 )
+from idi_sec_scraper.processor.types import DailyPipelineConfig, HistoricalPipelineConfig
 
 
 def main() -> None:

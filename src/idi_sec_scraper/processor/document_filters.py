@@ -2,52 +2,20 @@
 
 # Standard library imports
 import re
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
 
 # Third party imports
 import yaml
 
 # Application imports
-from idi_sec_scraper.processor.types import ParsedDocument
+from idi_sec_scraper.processor.types import (
+    DocumentFilterConfig,
+    FilterCondition,
+    FormTypeConfig,
+    ParsedDocument,
+)
 
 _FILTERABLE_FIELDS = frozenset({"description", "filename", "type"})
-
-
-@dataclass
-class FilterCondition:
-    """A single condition applied to one field of a document."""
-
-    field: Literal["description", "filename", "type"]
-    operator: Literal["regex", "exact"]
-    value: str
-    compiled_pattern: re.Pattern[str] | None = field(init=False, default=None, repr=False)
-
-    def __post_init__(self) -> None:
-        """Compile regex patterns once for fast matching."""
-        if self.operator == "regex":
-            self.compiled_pattern = re.compile(self.value)
-
-
-@dataclass
-class FormTypeConfig:
-    """Filter configuration for a single form type."""
-
-    match: str
-    documents: list[list[FilterCondition]] = field(default_factory=list)
-    compiled_match: re.Pattern[str] = field(init=False, repr=False)
-
-    def __post_init__(self) -> None:
-        """Compile the form-type matcher once."""
-        self.compiled_match = re.compile(self.match)
-
-
-@dataclass
-class DocumentFilterConfig:
-    """Top-level configuration mapping form type keys to their filter rules."""
-
-    form_types: dict[str, FormTypeConfig] = field(default_factory=dict)
 
 
 def load_document_filters(path: str) -> DocumentFilterConfig:
