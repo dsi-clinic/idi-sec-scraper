@@ -152,8 +152,9 @@ class FailureRegistry:
 
     def flush(self) -> None:
         """Write all buffered failures to disk and reset the pending counter."""
-        self.save()
-        self._pending = 0
+        with self._lock:
+            self.save()
+            self._pending = 0
 
     def __contains__(self, key: tuple[str, str]) -> bool:
         """Set-like membership check.
@@ -164,4 +165,5 @@ class FailureRegistry:
         Returns:
             True if the filing should not be retried.
         """
-        return key in self._entries
+        with self._lock:
+            return key in self._entries

@@ -1,0 +1,46 @@
+form_types:
+  10-K:
+    match: '10-?K'
+    cutoff_date: '2016-01-01'
+    documents:
+      - all_of:
+          - field: type
+            operator: regex
+            value: '^EX-21'
+
+  20-F:
+    match: '20-?F'
+    cutoff_date: '2016-01-01'
+    documents:
+      - all_of:
+          - field: type
+            operator: regex
+            value: '^EX-8'
+
+  8-K:
+    match: '8-K'
+    cutoff_date: '2016-01-01'
+    documents:
+      - all_of:
+          - field: description
+            operator: exact
+            value: "Complete submission text file"
+
+  13F-HR:
+    match: '13F-HR'
+    cutoff_date: '2016-01-01'
+    documents:
+      - all_of:
+          - field: type
+            operator: exact
+            value: "INFORMATION TABLE"
+          - field: filename
+            operator: regex
+            value: '(?i).*\.html$'
+      - all_of:
+          - field: type
+            operator: regex
+            value: '^13F-HR'
+          - field: filename
+            operator: regex
+            value: '(?i).*\.html$'

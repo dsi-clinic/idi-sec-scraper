@@ -68,14 +68,88 @@ def save_json(file_path: str, data: dict | list, mode: str = "w") -> None:
         data: The JSON data to save to the file as a dictionary or list.
         mode: File open mode ("w" to overwrite, "a" to append). S3 paths always overwrite.
     """
-    if "s3://" in file_path:
-        with tempfile.NamedTemporaryFile() as tmp:
-            tp = {"writebuffer": tmp}
-            with smart_open.open(file_path, "w", transport_params=tp) as fout:
+    try:
+        if "s3://" in file_path:
+            with tempfile.NamedTemporaryFile() as tmp:
+                tp = {"writebuffer": tmp}
+                with smart_open.open(file_path, "w", transport_params=tp) as fout:
+                    json.dump(data, fout, indent=2)
+        else:
+            with smart_open.open(file_path, mode) as fout:
                 json.dump(data, fout, indent=2)
-    else:
-        with smart_open.open(file_path, mode) as fout:
-            json.dump(data, fout, indent=2)
+    except ValueError as e:
+        raise ValueError(f"Failed to save JSON to {file_path!r}: {e}") from e
+
+
+def key_exists(file_path: str) -> bool:
+    """Return True if the file at the given path exists.
+
+    Supports local filesystem paths and ``s3://`` URLs.
+
+    Args:
+        file_path: Local path or ``s3://`` URL to check.
+
+    Returns:
+        True if the file exists, False if it does not.
+
+    Raises:
+        botocore.exceptions.ClientError: If an S3 error other than ``NoSuchKey`` occurs.
+    """
+    try:
+        with smart_open.open(file_path, "rb") as f:
+            f.read(1)
+        return True
+    except (FileNotFoundError, OSError):
+        return False
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") in ("NoSuchKey", "404"):
+            return False
+        raise
+
+
+def load_content(file_path: str) -> str:
+    """Load text content from a local path or S3 URL.
+
+    Missing files return an empty string instead of raising.
+
+    Args:
+        file_path: Local filesystem path or ``s3://`` URL of the text file.
+
+    Returns:
+        File contents as a string, or ``""`` when the file does not exist.
+
+    Raises:
+        botocore.exceptions.ClientError: If an S3 error other than ``NoSuchKey`` occurs.
+    """
+    try:
+        with smart_open.open(file_path) as f:
+            return f.read()
+    except (FileNotFoundError, OSError):
+        return ""
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") == "NoSuchKey":
+            return ""
+        raise
+
+
+def save_content(file_path: str, content: str) -> None:
+    """Save text content to a local path or S3 URL.
+
+    Args:
+        file_path: Local filesystem path or ``s3://`` URL to write to.
+        content: Text content to write.
+    """
+    try:
+        if "s3://" in file_path:
+            with tempfile.NamedTemporaryFile() as tmp:
+                tp = {"writebuffer": tmp}
+                with smart_open.open(file_path, "w", transport_params=tp) as fout:
+                    fout.write(content)
+        else:
+            with smart_open.open(file_path, "w") as fout:
+                fout.write(content)
+    except ValueError as e:
+        raise ValueError(f"Failed to save content to {file_path!r}: {e}") from e
 
 
 @contextmanager
