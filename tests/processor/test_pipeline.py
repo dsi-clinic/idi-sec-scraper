@@ -245,7 +245,12 @@ class TestHistoricalLoadInput:
         pipeline = HistoricalSECScraperPipeline(config, sec_client)
         pipeline.load_input()
 
-        mock_cls.assert_called_once_with(sec_client, ["10-?K", "8-K"], pipeline.failure_registry)
+        mock_cls.assert_called_once_with(
+            sec_client,
+            ["10-?K", "8-K"],
+            pipeline.failure_registry,
+            cutoffs={"10-?K": None, "8-K": None},
+        )
         mock_cls.return_value.discover.assert_called_once_with("s3://bucket/submissions.zip", None)
 
     def test_discovery_held_as_attribute(self, mocker):
@@ -293,7 +298,7 @@ class TestDailyLoadInput:
         pipeline = DailySECScraperPipeline(config, sec_client)
         pipeline.load_input()
 
-        mock_cls.assert_called_once_with(sec_client, ["8-K"])
+        mock_cls.assert_called_once_with(sec_client, ["8-K"], cutoffs={"8-K": None})
         mock_cls.return_value.discover.assert_called_once_with(
             datetime.date(2026, 4, 1), datetime.date(2026, 4, 3)
         )
@@ -1051,3 +1056,4 @@ class TestProcess:
         assert len(results) == 1
         assert pipeline.stats.scraped_filings == 1
         assert pipeline.stats.skipped_filings == 0
+

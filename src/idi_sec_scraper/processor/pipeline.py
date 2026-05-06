@@ -411,8 +411,10 @@ class HistoricalSECScraperPipeline(SECScraperPipeline):
 
     def _make_discovery(self) -> HistoricalDiscovery:
         """Create a HistoricalDiscovery instance from config and filter patterns."""
-        patterns = [ft.match for ft in self.document_filter_config.form_types.values()]
-        return HistoricalDiscovery(self.sec_client, patterns, self.failure_registry)
+        ft_configs = list(self.document_filter_config.form_types.values())
+        patterns = [ft.match for ft in ft_configs]
+        cutoffs = {ft.match: ft.cutoff_date for ft in ft_configs}
+        return HistoricalDiscovery(self.sec_client, patterns, self.failure_registry, cutoffs=cutoffs)
 
     def load_input(self) -> list[DiscoveredFiling]:
         """Discover filings from the submissions.zip archive.
@@ -428,8 +430,10 @@ class DailySECScraperPipeline(SECScraperPipeline):
 
     def _make_discovery(self) -> DailyDiscovery:
         """Create a DailyDiscovery instance from config and filter patterns."""
-        patterns = [ft.match for ft in self.document_filter_config.form_types.values()]
-        return DailyDiscovery(self.sec_client, patterns)
+        ft_configs = list(self.document_filter_config.form_types.values())
+        patterns = [ft.match for ft in ft_configs]
+        cutoffs = {ft.match: ft.cutoff_date for ft in ft_configs}
+        return DailyDiscovery(self.sec_client, patterns, cutoffs=cutoffs)
 
     def load_input(self) -> list[DiscoveredFiling]:
         """Discover filings from daily crawler indexes.

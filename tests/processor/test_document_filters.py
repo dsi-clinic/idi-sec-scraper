@@ -1,6 +1,7 @@
 """Tests for processor.document_filters."""
 
 # Standard library imports
+import datetime
 import textwrap
 
 # Third party imports
@@ -157,6 +158,33 @@ class TestLoadDocumentFilters:
         config = load_document_filters(str(p))
 
         assert config.form_types["8-K"].documents == []
+
+    def test_cutoff_date_defaults_to_none(self, tmp_path):
+        yaml_text = textwrap.dedent("""\
+            form_types:
+              8-K:
+                match: "8-K"
+                documents: []
+        """)
+        p = tmp_path / "document_filters.yaml"
+        p.write_text(yaml_text)
+        config = load_document_filters(str(p))
+
+        assert config.form_types["8-K"].cutoff_date is None
+
+    def test_explicit_cutoff_date_is_parsed(self, tmp_path):
+        yaml_text = textwrap.dedent("""\
+            form_types:
+              8-K:
+                match: "8-K"
+                cutoff_date: "2020-06-15"
+                documents: []
+        """)
+        p = tmp_path / "document_filters.yaml"
+        p.write_text(yaml_text)
+        config = load_document_filters(str(p))
+
+        assert config.form_types["8-K"].cutoff_date == datetime.date(2020, 6, 15)
 
     def test_loads_real_config_file(self):
         config = load_document_filters("config/document_filters.yaml")

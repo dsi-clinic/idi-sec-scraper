@@ -1,6 +1,7 @@
 form_types:
   10-K:
     match: '10-?K'
+    cutoff_date: '2016-01-01'
     documents:
       - all_of:
           - field: type
@@ -9,6 +10,7 @@ form_types:
 
   20-F:
     match: '20-?F'
+    cutoff_date: '2016-01-01'
     documents:
       - all_of:
           - field: type
@@ -17,6 +19,7 @@ form_types:
 
   8-K:
     match: '8-K'
+    cutoff_date: '2016-01-01'
     documents:
       - all_of:
           - field: description
@@ -25,6 +28,7 @@ form_types:
 
   13F-HR:
     match: '13F-HR'
+    cutoff_date: '2016-01-01'
     documents:
       - all_of:
           - field: type

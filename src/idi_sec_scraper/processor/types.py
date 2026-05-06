@@ -94,6 +94,7 @@ class FormTypeConfig:
 
     match: str
     documents: list[list[FilterCondition]] = field(default_factory=list)
+    cutoff_date: datetime.date | None = None
     compiled_match: re.Pattern[str] = field(init=False, repr=False)
 
     def __post_init__(self) -> None:

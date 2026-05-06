@@ -12,6 +12,7 @@ from idi_sec_scraper.processor.discovery import (
     Discovery,
     HistoricalDiscovery,
     _accession_from_url,
+    _before_cutoff,
     _crawler_idx_url,
     _find_form_type_col,
     _matches_form_types,
@@ -673,3 +674,115 @@ class TestDiscoveryABC:
     def test_historical_discovery_is_instance(self, mocker):
         client = mocker.MagicMock()
         assert isinstance(HistoricalDiscovery(client, []), Discovery)
+
+
+class TestBeforeCutoff:
+    """Tests for _before_cutoff()."""
+
+    def test_before_cutoff_returns_true(self):
+        cutoffs = {"8-K": datetime.date(2020, 1, 1)}
+        assert _before_cutoff("8-K", datetime.date(2019, 12, 31), ["8-K"], cutoffs)
+
+    def test_on_cutoff_date_returns_false(self):
+        cutoffs = {"8-K": datetime.date(2020, 1, 1)}
+        assert not _before_cutoff("8-K", datetime.date(2020, 1, 1), ["8-K"], cutoffs)
+
+    def test_after_cutoff_returns_false(self):
+        cutoffs = {"8-K": datetime.date(2020, 1, 1)}
+        assert not _before_cutoff("8-K", datetime.date(2021, 1, 1), ["8-K"], cutoffs)
+
+    def test_none_cutoff_never_filters(self):
+        cutoffs = {"8-K": None}
+        assert not _before_cutoff("8-K", datetime.date(2000, 1, 1), ["8-K"], cutoffs)
+
+    def test_no_matching_pattern_returns_false(self):
+        cutoffs = {"10-K": datetime.date(2020, 1, 1)}
+        assert not _before_cutoff("8-K", datetime.date(2019, 1, 1), ["10-K"], cutoffs)
+
+    def test_uses_first_matching_pattern(self):
+        # "8-K" matches "8-K" (cutoff 2020) not "8-.*" (cutoff 2018) — first match wins
+        cutoffs = {"8-K": datetime.date(2020, 1, 1), "8-.*": datetime.date(2018, 1, 1)}
+        # filing_date 2019 is before 2020 but after 2018
+        assert _before_cutoff("8-K", datetime.date(2019, 6, 1), ["8-K", "8-.*"], cutoffs)
+
+
+class TestDailyDiscoveryCutoff:
+    """Cutoff filtering in DailyDiscovery."""
+
+    def test_filing_before_cutoff_excluded(self, mocker):
+        # _SAMPLE_IDX has all filings dated 2026-04-01; cutoff is after that
+        client = _make_sec_client(mocker)
+        cutoffs = {"8-K": datetime.date(2027, 1, 1)}
+        result = DailyDiscovery(client, ["8-K"], cutoffs=cutoffs).discover(
+            datetime.date(2026, 4, 1), datetime.date(2026, 4, 1)
+        )
+
+        assert result == []
+
+    def test_filing_on_cutoff_date_included(self, mocker):
+        client = _make_sec_client(mocker)
+        cutoffs = {"8-K": datetime.date(2026, 4, 1)}
+        result = DailyDiscovery(client, ["8-K"], cutoffs=cutoffs).discover(
+            datetime.date(2026, 4, 1), datetime.date(2026, 4, 1)
+        )
+
+        assert len(result) == 1
+
+    def test_no_cutoff_includes_all(self, mocker):
+        client = _make_sec_client(mocker)
+        result = DailyDiscovery(client, ["8-K"]).discover(
+            datetime.date(2026, 4, 1), datetime.date(2026, 4, 1)
+        )
+
+        assert len(result) == 1
+
+    def test_cutoff_only_applies_to_matching_form_type(self, mocker):
+        client = _make_sec_client(mocker)
+        # 8-K is cut off but 13F-HR is not
+        cutoffs = {"8-K": datetime.date(2027, 1, 1), "13F-HR": None}
+        result = DailyDiscovery(client, ["8-K", "13F-HR"], cutoffs=cutoffs).discover(
+            datetime.date(2026, 4, 1), datetime.date(2026, 4, 1)
+        )
+
+        assert len(result) == 1
+        assert result[0].form_type == "13F-HR"
+
+
+class TestHistoricalDiscoveryCutoff:
+    """Cutoff filtering in HistoricalDiscovery."""
+
+    def test_filing_before_cutoff_excluded(self, mocker):
+        zb = _make_zip({"CIK0000320193.json": _APPLE_CIK_JSON})
+        client = _make_historical_client(mocker, zb)
+        # All Apple 10-K filings are in 2026; cutoff is after that
+        cutoffs = {"10-?K": datetime.date(2027, 1, 1)}
+        result = HistoricalDiscovery(client, ["10-?K"], cutoffs=cutoffs).discover("fake://path.zip")
+
+        assert result == []
+
+    def test_filing_on_cutoff_date_included(self, mocker):
+        zb = _make_zip({"CIK0000320193.json": _APPLE_CIK_JSON})
+        client = _make_historical_client(mocker, zb)
+        # 10-K filed 2026-01-15; cutoff exactly on that date → included
+        cutoffs = {"10-?K": datetime.date(2026, 1, 15)}
+        result = HistoricalDiscovery(client, ["10-?K"], cutoffs=cutoffs).discover("fake://path.zip")
+
+        assert any(f.accession_number == "0000320193-26-000001" for f in result)
+
+    def test_no_cutoff_includes_all(self, mocker):
+        zb = _make_zip({"CIK0000320193.json": _APPLE_CIK_JSON})
+        client = _make_historical_client(mocker, zb)
+        result = HistoricalDiscovery(client, ["10-?K"]).discover("fake://path.zip")
+
+        assert len(result) == 2
+
+    def test_cutoff_only_applies_to_matching_form_type(self, mocker):
+        zb = _make_zip({"CIK0000320193.json": _APPLE_CIK_JSON})
+        client = _make_historical_client(mocker, zb)
+        # 10-K cut off, 8-K not
+        cutoffs = {"10-?K": datetime.date(2027, 1, 1), "8-K": None}
+        result = HistoricalDiscovery(client, ["10-?K", "8-K"], cutoffs=cutoffs).discover(
+            "fake://path.zip"
+        )
+
+        assert all(f.form_type == "8-K" for f in result)

@@ -21,10 +21,16 @@ _logger = get_logger("discovery")
 class Discovery(ABC):
     """Abstract base class for SEC filing discovery strategies."""
 
-    def __init__(self, sec_client: SecClient, form_types: list[str]) -> None:
-        """Initialize with a SEC client and form type regex patterns."""
+    def __init__(
+        self,
+        sec_client: SecClient,
+        form_types: list[str],
+        cutoffs: dict[str, datetime.date | None] | None = None,
+    ) -> None:
+        """Initialize with a SEC client, form type regex patterns, and optional cutoff dates."""
         self.sec_client = sec_client
         self.form_types = form_types
+        self.cutoffs: dict[str, datetime.date | None] = cutoffs or {}
 
     @abstractmethod
     def discover(self, *args, **kwargs) -> list[DiscoveredFiling]:
@@ -106,13 +112,17 @@ class DailyDiscovery(Discovery):
             if not _matches_form_types(form_type, self.form_types):
                 continue
 
+            filing_date = _parse_yyyymmdd(match.group(3))
+            if _before_cutoff(form_type, filing_date, self.form_types, self.cutoffs):
+                continue
+
             filing_url = match.group(4)
             filings.append(
                 DiscoveredFiling(
                     cik=match.group(2),
                     accession_number=_accession_from_url(filing_url),
                     form_type=form_type,
-                    filing_date=_parse_yyyymmdd(match.group(3)),
+                    filing_date=filing_date,
                     url=filing_url,
                     company_name=company_name,
                 )
@@ -129,9 +139,10 @@ class HistoricalDiscovery(Discovery):
         sec_client: SecClient,
         form_types: list[str],
         failure_registry: FailureRegistry | None = None,
+        cutoffs: dict[str, datetime.date | None] | None = None,
     ) -> None:
-        """Initialize with a SEC client, form type patterns, and optional failure registry."""
-        super().__init__(sec_client, form_types)
+        """Initialize with a SEC client, form type patterns, optional failure registry, and optional cutoff dates."""
+        super().__init__(sec_client, form_types, cutoffs)
         self.failure_registry = failure_registry
 
     def discover(self, submissions_url: str, max_ciks: int | None = None) -> list[DiscoveredFiling]:
@@ -215,6 +226,9 @@ class HistoricalDiscovery(Discovery):
         for form, accession_number, filing_date in zip(forms, accession_numbers, filing_dates):
             if not _matches_form_types(form, self.form_types):
                 continue
+            parsed_date = datetime.date.fromisoformat(filing_date)
+            if _before_cutoff(form, parsed_date, self.form_types, self.cutoffs):
+                continue
             accession_nodash = accession_number.replace("-", "")
             url = _INDEX_HTM_URL.format(
                 cik=cik,
@@ -226,7 +240,7 @@ class HistoricalDiscovery(Discovery):
                     cik=cik,
                     accession_number=accession_number,
                     form_type=form,
-                    filing_date=datetime.date.fromisoformat(filing_date),
+                    filing_date=parsed_date,
                     url=url,
                     company_name=company_name,
                 )
@@ -253,6 +267,20 @@ def _crawler_idx_url(date: datetime.date) -> str:
 
 def _matches_form_types(form_type: str, patterns: list[str]) -> bool:
     return any(re.match(pattern, form_type) for pattern in patterns)
+
+
+def _before_cutoff(
+    form_type: str,
+    filing_date: datetime.date,
+    patterns: list[str],
+    cutoffs: dict[str, datetime.date | None],
+) -> bool:
+    """Return True if filing_date is before the cutoff for the first matching pattern."""
+    for pattern in patterns:
+        if re.match(pattern, form_type):
+            cutoff = cutoffs.get(pattern)
+            return cutoff is not None and filing_date < cutoff
+    return False
 
 
 def _parse_yyyymmdd(s: str) -> datetime.date:

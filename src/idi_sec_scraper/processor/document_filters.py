@@ -1,6 +1,7 @@
 """Document filter configuration loading and application."""
 
 # Standard library imports
+import datetime
 import re
 from pathlib import Path
 
@@ -49,7 +50,9 @@ def load_document_filters(path: str) -> DocumentFilterConfig:
                     raise ValueError(f"Invalid filter operator: {operator!r}")
                 conditions.append(FilterCondition(field=field_name, operator=operator, value=value))
             groups.append(conditions)
-        form_types[key] = FormTypeConfig(match=ft_raw["match"], documents=groups)
+        cutoff_raw = ft_raw.get("cutoff_date")
+        cutoff_date = datetime.date.fromisoformat(str(cutoff_raw)) if cutoff_raw is not None else None
+        form_types[key] = FormTypeConfig(match=ft_raw["match"], documents=groups, cutoff_date=cutoff_date)
 
     return DocumentFilterConfig(form_types=form_types)
 
