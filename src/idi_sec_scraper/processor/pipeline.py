@@ -29,6 +29,7 @@ from idi_sec_scraper.processor.document_filters import (
     select_and_filter_documents,
 )
 from idi_sec_scraper.processor.failures import FailureType, SECScraperFailureClassifier
+from idi_sec_scraper.processor.manifest import update_bucket_manifest
 from idi_sec_scraper.processor.parser import parse_index_htm
 from idi_sec_scraper.processor.types import (
     DiscoveredFiling,
@@ -151,6 +152,15 @@ class SECScraperPipeline(Pipeline, ABC):
         """
         super().__init__(config, sec_client)
         self.discovery = self._make_discovery()
+
+    def run(self) -> None:
+        """Execute the full pipeline: load → process → update manifest → display stats."""
+        start_time = datetime.datetime.now()
+        filings = self.load_input()
+        scraped = self.process(filings)
+        update_bucket_manifest(self.config.bucket, scraped)
+        self.display_stats()
+        self.logger.info("Elapsed time: %s", datetime.datetime.now() - start_time)
 
     @abstractmethod
     def _make_discovery(self) -> Discovery:
