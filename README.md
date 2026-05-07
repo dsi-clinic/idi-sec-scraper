@@ -111,6 +111,14 @@ uv run sec-scraper \
   --end-date 2026-04-30
 ```
 
+Omit both `--start-date` and `--end-date` to scrape yesterday's filings (the default for the scheduled ECS task):
+
+```bash
+uv run sec-scraper --bucket idi-sec-scraper daily
+```
+
+If either date flag is supplied, both are required — mixing one explicit date with the yesterday default could silently produce an invalid range.
+
 ### Common options
 
 These flags apply to both `historical` and `daily` and must be placed **before** the subcommand:
@@ -121,7 +129,7 @@ These flags apply to both `historical` and `daily` and must be placed **before**
 | `--document-filters` | `config/document_filters.yaml` | Path to document filter config |
 | `--failure-file` | *(disabled)* | Path or `s3://` URL for the failure registry JSON |
 | `--rate-limit` | `0.2` | Minimum seconds between SEC requests |
-| `--max-workers` | `8` | Number of concurrent filing threads |
+| `--max-workers` | `15` | Number of concurrent filing threads |
 
 ---
 
@@ -154,26 +162,28 @@ If `documents` is an empty list, all documents in the filing are downloaded. If 
 
 ```
 s3://<bucket>/
-└── <YYYY-MM-DD>/               # filing date
-    └── <form-type>/            # e.g. 10-K, 8-K, 13F-HR
-        └── <cik>/              # SEC Central Index Key (no leading zeros)
-            └── <accession>/    # accession number with dashes removed
-                ├── manifest.json
-                ├── index.htm
-                └── <document-filename>
+└── sec/
+    └── <YYYY-MM-DD>/               # filing date
+        └── <form-type>/            # e.g. 10-K, 8-K, 13F-HR
+            └── <cik>/              # SEC Central Index Key (no leading zeros)
+                └── <accession>/    # accession number with dashes removed
+                    ├── manifest.json
+                    ├── index.htm
+                    └── <document-filename>
 ```
 
 Example:
 
 ```
-s3://idi-sec-scraper/
-└── 2026-02-24/
-    └── 8-K/
-        └── 320193/
-            └── 000114036126006577/
-                ├── manifest.json
-                ├── index.htm
-                └── ef20060722_8k.htm
+s3://idi-dev-processor/
+└── sec/
+    └── 2026-02-24/
+        └── 8-K/
+            └── 320193/
+                └── 000114036126006577/
+                    ├── manifest.json
+                    ├── index.htm
+                    └── ef20060722_8k.htm
 ```
 
 ### manifest.json schema
@@ -197,7 +207,7 @@ Every filing directory contains a `manifest.json` written after scraping. This i
       "description": "8-K",
       "filename": "ef20060722_8k.htm",
       "type": "8-K",
-      "s3_key": "s3://idi-sec-scraper/2026-02-24/8-K/320193/000114036126006577/ef20060722_8k.htm",
+      "s3_key": "s3://idi-dev-processor/sec/2026-02-24/8-K/320193/000114036126006577/ef20060722_8k.htm",
       "url": "https://www.sec.gov/Archives/edgar/data/320193/000114036126006577/ef20060722_8k.htm"
     }
   ]
@@ -254,7 +264,7 @@ Every filing directory contains a `manifest.json` written after scraping. This i
 The S3 key structure encodes the filing date and form type, so consumers can scope their reads to exactly the dates and form types they care about without scanning the whole bucket. The key structure is:
 
 ```
-s3://<bucket>/<YYYY-MM-DD>/<form-type>/<cik>/<accession>/manifest.json
+s3://<bucket>/sec/<YYYY-MM-DD>/<form-type>/<cik>/<accession>/manifest.json
 ```
 
 For each filing directory, read `manifest.json` first. Skip any filing where `failure_reason` is non-empty — its `documents` list will be empty. The `documents[].s3_key` fields give ready-to-use `s3://` paths to every downloaded file.
@@ -277,7 +287,7 @@ def iter_manifests(form_types: str | list[str], start: date, end: date):
     day = start
     while day <= end:
         for form_type in form_types:
-            prefix = f"{day}/{form_type}/"
+            prefix = f"sec/{day}/{form_type}/"
             paginator = s3.get_paginator("list_objects_v2")
             for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
                 for obj in page.get("Contents", []):
@@ -341,6 +351,116 @@ for manifest in iter_manifests("8-K", start=date(2024, 1, 1), end=date(2024, 12,
 
 ---
 
+## AWS ECS Architecture
+
+The scraper runs as an **ECS Fargate task** scheduled by **EventBridge Scheduler**. Infrastructure is defined in `pulumi/` using Pulumi (Python).
+
+### Design Decisions
+
+| Decision | Rationale |
+|---|---|
+| **Fargate** (not EC2) | No instance management — container runs and exits; portable image |
+| **EventBridge Scheduler** (not Step Functions) | Single task; no workflow orchestration needed |
+| **Public subnet** (no NAT Gateway) | Task needs outbound internet for SEC EDGAR |
+| **`awslogs` driver only** | Captures all stdout/stderr; linked directly to the task in the ECS console |
+| **Shell wrapper for dates** | Task computes yesterday's date at runtime so it always scrapes the correct day |
+
+### Resources
+
+| Module | Resources |
+|---|---|
+| `config.py` | Shared name prefix (`{project}-{stack}-{app}`), tags, AWS caller identity |
+| `networking.py` | Default VPC, single-AZ public subnet, egress-only security group |
+| `iam.py` | Task execution role (ECR pull, CloudWatch Logs, Secrets Manager) + task role (S3, ECS Exec) |
+| `ecr.py` | ECR repository + lifecycle policy (retains last 5 images) |
+| `ecs.py` | ECS cluster (Fargate, Container Insights), CloudWatch log group (30-day retention), task definition (1 vCPU / 4 GB) |
+| `secrets.py` | Secrets Manager secret for SEC User-Agent header; injected as `SEC_USER_AGENT` env var at task startup |
+| `scheduling.py` | EventBridge Scheduler (daily cron, starts disabled), SQS dead-letter queue for failed invocations, scheduler IAM role |
+
+### Deployment
+
+```bash
+cd pulumi/
+
+# First-time setup
+uv run --group pulumi pulumi stack init dev
+uv run --group pulumi pulumi config set aws:region us-east-2
+uv run --group pulumi pulumi config set idi:bucket_name <bucket>
+uv run --group pulumi pulumi config set --secret idi:sec_user_agent "Name email@example.com"
+
+# Deploy
+uv run --group pulumi pulumi up
+```
+
+#### Configuration Reference
+
+| Config | Default | Description |
+|---|---|---|
+| `aws:region` | `us-east-2` | AWS region |
+| `idi:app_name` | `sec-scraper` | Application name used in resource naming |
+| `idi:bucket_name` | — | S3 bucket for scraped filings (created externally) |
+| `idi:sec_user_agent` | — | SEC EDGAR User-Agent header (secret; stored in Secrets Manager) |
+| `idi:cron_sec_scraper` | `cron(0 3 * * ? *)` | EventBridge schedule expression (3 AM UTC daily) |
+| `idi:schedule_enabled` | `false` | Enable the EventBridge schedule |
+| `idi:cpu` | `1024` | Fargate task CPU units |
+| `idi:memory` | `4096` | Fargate task memory (MiB) |
+| `idi:rate_limit` | `0.15` | Seconds between SEC API requests |
+| `idi:max_workers` | `15` | Concurrent filing download threads |
+
+### Manual Task Execution
+
+Use `pulumi stack output` to retrieve the cluster name, subnet ID, and security group ID.
+
+```bash
+aws ecs run-task \
+    --cluster <cluster-name> \
+    --task-definition <task-definition> \
+    --launch-type FARGATE \
+    --propagate-tags TASK_DEFINITION \
+    --network-configuration "awsvpcConfiguration={subnets=[<subnet-id>],securityGroups=[<sg-id>],assignPublicIp=ENABLED}" \
+    --overrides '{
+        "containerOverrides": [{
+            "name": "sec-scraper",
+            "command": ["sh", "-c", "sec-scraper --bucket <bucket> daily --start-date 2026-04-01 --end-date 2026-04-30"]
+        }]
+    }'
+```
+
+### Monitoring
+
+- **Logs**: CloudWatch → Log groups → `/ecs/{name_prefix}` → stream per task run
+- **ECS console**: Tasks tab shows stopped tasks for up to 1 hour after completion
+- **Scheduling failures**: Check the SQS dead-letter queue (`pulumi stack output dlq_url`)
+- **ECS Exec** (interactive debug into a running task):
+  ```bash
+  aws ecs execute-command \
+    --cluster <cluster> \
+    --task <task-id> \
+    --container sec-scraper \
+    --interactive \
+    --command "/bin/sh"
+  ```
+
+### Building and Pushing the Container Image
+
+```bash
+# Set ECR repo URL
+ECR_REPO=$(cd pulumi && uv run --group pulumi pulumi stack output ecr_repo_url)
+
+# Authenticate Docker to ECR
+aws ecr get-login-password --region us-east-2 | \
+  docker login --username AWS --password-stdin \
+  $(aws sts get-caller-identity --query Account --output text).dkr.ecr.us-east-2.amazonaws.com
+
+# Build for linux/amd64 (required on Apple Silicon) and push
+docker buildx build --platform linux/amd64 \
+  -f dockerfiles/Dockerfile.scraper \
+  -t $ECR_REPO \
+  --push .
+```
+
+---
+
 ## Development
 
 Run the test suite:
@@ -361,8 +481,8 @@ Run a small test scrape against local MinIO:
 docker compose up -d
 
 uv run sec-scraper \
-  --bucket idi-sec-scraper \
-  --failure-file s3://idi-sec-scraper/failures.json \
+  --bucket idi-dev-processor \
+  --failure-file s3://idi-dev-processor/sec/failures.json \
   historical \
   --max-ciks 50
 ```

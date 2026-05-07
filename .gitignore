@@ -1,3 +1,5 @@
+.env.local
+
 # Python-generated files
 .jupyter
 .ipynb_checkpoints

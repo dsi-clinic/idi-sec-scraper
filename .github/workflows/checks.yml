@@ -101,3 +101,52 @@ jobs:
 
       - name: CodeQL Analysis Analyze
         uses: github/codeql-action/analyze@v4
+
+  pulumi-preview:
+    name: Pulumi Preview
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write    # This is required for requesting JWT
+      contents: read     # This is required for actions/checkout
+    defaults:
+      run:
+        working-directory: ${{ env.PROJECT_DIR }}
+    env:
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+          python-version: "3.13"
+
+      - name: Install Pulumi dependencies
+        run: uv sync --group pulumi
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN_CHECKS }}
+          role-session-name: idi-github-ci
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-2' }}
+
+      - name: Set Pulumi stack
+        id: stack
+        run: |
+          if [ "${{ github.base_ref }}" = "main" ]; then
+            echo "name=prod" >> $GITHUB_OUTPUT
+          else
+            echo "name=dev" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Pulumi preview (${{ steps.stack.outputs.name }} stack)
+        run: |
+          cd pulumi
+          pulumi login s3://${{ secrets.PULUMI_STATE_BUCKET }}
+          pulumi stack select ${{ steps.stack.outputs.name }} 2>/dev/null || pulumi stack init ${{ steps.stack.outputs.name }}
+          pulumi config set aws:region ${{ secrets.AWS_REGION || 'us-east-2' }}
+          pulumi config set idi:bucket_name ${{ secrets.BUCKET_NAME }}
+          pulumi config set --secret idi:sec_user_agent "${{ secrets.SEC_USER_AGENT }}"
+          uv run pulumi preview --non-interactive

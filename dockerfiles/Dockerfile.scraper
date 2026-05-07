@@ -1,0 +1,35 @@
+# Multi-stage build for efficient image size
+FROM python:3.13-slim AS builder
+
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+COPY pyproject.toml README.md ./
+COPY src/ ./src/
+
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -e .
+
+# Final stage - minimal runtime image
+FROM python:3.13-slim
+
+RUN useradd -m -u 1000 pipeline && \
+    mkdir -p /app && \
+    chown -R pipeline:pipeline /app
+
+WORKDIR /app
+
+COPY --from=builder /usr/local/lib/python3.13/site-packages /usr/local/lib/python3.13/site-packages
+COPY --from=builder /usr/local/bin/sec-scraper /usr/local/bin/sec-scraper
+COPY --from=builder /app /app
+COPY config/ ./config/
+
+USER pipeline
+
+ENV PYTHONUNBUFFERED=1
+
+ENTRYPOINT ["sec-scraper"]
+CMD ["--help"]
