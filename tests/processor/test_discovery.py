@@ -367,7 +367,7 @@ class TestDiscoverHistorical:
     def test_filters_by_form_type(self, mocker):
         zb = _make_zip({"CIK0000320193.json": _APPLE_CIK_JSON})
         client = _make_historical_client(mocker, zb)
-        result = HistoricalDiscovery(client, ["10-?K"]).discover("fake://path.zip")
+        result = list(HistoricalDiscovery(client, ["10-?K"]).discover("fake://path.zip"))
 
         assert len(result) == 2
         assert {f.form_type for f in result} == {"10-K", "10-K/A"}
@@ -375,7 +375,7 @@ class TestDiscoverHistorical:
     def test_no_matches_returns_empty(self, mocker):
         zb = _make_zip({"CIK0000320193.json": _APPLE_CIK_JSON})
         client = _make_historical_client(mocker, zb)
-        result = HistoricalDiscovery(client, ["20-F"]).discover("fake://path.zip")
+        result = list(HistoricalDiscovery(client, ["20-F"]).discover("fake://path.zip"))
 
         assert result == []
 
@@ -416,7 +416,7 @@ class TestDiscoverHistorical:
             }
         )
         client = _make_historical_client(mocker, zb)
-        result = HistoricalDiscovery(client, ["10-?K"]).discover("fake://path.zip")
+        result = list(HistoricalDiscovery(client, ["10-?K"]).discover("fake://path.zip"))
 
         # Overflow is NOT processed as a top-level entry — only 2 matches from main file
         assert len(result) == 2
@@ -429,7 +429,7 @@ class TestDiscoverHistorical:
             }
         )
         client = _make_historical_client(mocker, zb)
-        result = HistoricalDiscovery(client, ["10-?K"]).discover("fake://path.zip")
+        result = list(HistoricalDiscovery(client, ["10-?K"]).discover("fake://path.zip"))
 
         assert len(result) == 1
         assert result[0].accession_number == "0000320193-25-000099"
@@ -466,7 +466,7 @@ class TestDiscoverHistorical:
             }
         )
         client = _make_historical_client(mocker, zb)
-        result = HistoricalDiscovery(client, ["10-K"]).discover("fake://path.zip")
+        result = list(HistoricalDiscovery(client, ["10-K"]).discover("fake://path.zip"))
 
         assert len(result) == 3
         assert {f.cik for f in result} == {"320193", "789012"}
@@ -486,7 +486,7 @@ class TestDiscoverHistorical:
         }
         zb = _make_zip({"CIK0000111111.json": bad})
         client = _make_historical_client(mocker, zb)
-        result = HistoricalDiscovery(client, [".*"]).discover("fake://path.zip")
+        result = list(HistoricalDiscovery(client, [".*"]).discover("fake://path.zip"))
 
         assert result == []
 
@@ -506,7 +506,7 @@ class TestDiscoverHistorical:
         zb = _make_zip({"CIK0000111111.json": bad})
         client = _make_historical_client(mocker, zb)
         mock_logger = mocker.patch("idi_sec_scraper.processor.discovery._logger")
-        HistoricalDiscovery(client, [".*"]).discover("fake://path.zip")
+        list(HistoricalDiscovery(client, [".*"]).discover("fake://path.zip"))
 
         mock_logger.error.assert_called_once()
         assert "mismatched" in mock_logger.error.call_args.args[0]
@@ -530,7 +530,7 @@ class TestDiscoverHistorical:
         zb = _make_zip({"CIK0000111111.json": bad})
         client = _make_historical_client(mocker, zb)
         registry = FailureRegistry("", SECScraperFailureClassifier())
-        HistoricalDiscovery(client, [".*"], registry).discover("fake://path.zip")
+        list(HistoricalDiscovery(client, [".*"], registry).discover("fake://path.zip"))
 
         assert ("111111", "CIK0000111111.json") in registry._entries
 
@@ -543,7 +543,7 @@ class TestDiscoverHistorical:
         registry = FailureRegistry("", SECScraperFailureClassifier())
         registry._entries.add(("320193", "CIK0000320193.json"))
 
-        result = HistoricalDiscovery(client, ["10-K"], registry).discover("fake://path.zip")
+        result = list(HistoricalDiscovery(client, ["10-K"], registry).discover("fake://path.zip"))
 
         assert result == []
 
@@ -562,7 +562,7 @@ class TestDiscoverHistorical:
         zb = _make_zip({"CIK0000320193.json": data})
         client = _make_historical_client(mocker, zb)
         registry = FailureRegistry("", SECScraperFailureClassifier())
-        HistoricalDiscovery(client, [".*"], registry).discover("fake://path.zip")
+        list(HistoricalDiscovery(client, [".*"], registry).discover("fake://path.zip"))
 
         assert ("320193", "CIK0000320193-submissions-missing.json") in registry._entries
 
@@ -583,7 +583,7 @@ class TestDiscoverHistorical:
         registry = FailureRegistry("", SECScraperFailureClassifier())
         registry._entries.add(("320193", "CIK0000320193-submissions-missing.json"))
         mock_logger = mocker.patch("idi_sec_scraper.processor.discovery._logger")
-        HistoricalDiscovery(client, [".*"], registry).discover("fake://path.zip")
+        list(HistoricalDiscovery(client, [".*"], registry).discover("fake://path.zip"))
 
         # warning about skipping, not error about missing
         warning_msgs = [str(c) for c in mock_logger.warning.call_args_list]
@@ -606,7 +606,7 @@ class TestDiscoverHistorical:
         zb = _make_zip({"CIK0000320193.json": data})
         client = _make_historical_client(mocker, zb)
         mock_logger = mocker.patch("idi_sec_scraper.processor.discovery._logger")
-        HistoricalDiscovery(client, [".*"]).discover("fake://path.zip")
+        list(HistoricalDiscovery(client, [".*"]).discover("fake://path.zip"))
 
         mock_logger.error.assert_called_once()
         assert "not found" in mock_logger.error.call_args.args[0]
@@ -615,7 +615,7 @@ class TestDiscoverHistorical:
         zb = _make_zip({"CIK0000111111.json": _APPLE_CIK_JSON})
         client = _make_historical_client(mocker, zb)
         mocker.patch("idi_sec_scraper.processor.discovery.json.load", side_effect=EOFError())
-        result = HistoricalDiscovery(client, [".*"]).discover("fake://path.zip")
+        result = list(HistoricalDiscovery(client, [".*"]).discover("fake://path.zip"))
 
         assert result == []
 
@@ -624,7 +624,7 @@ class TestDiscoverHistorical:
         client = _make_historical_client(mocker, zb)
         mocker.patch("idi_sec_scraper.processor.discovery.json.load", side_effect=EOFError())
         mock_logger = mocker.patch("idi_sec_scraper.processor.discovery._logger")
-        HistoricalDiscovery(client, [".*"]).discover("fake://path.zip")
+        list(HistoricalDiscovery(client, [".*"]).discover("fake://path.zip"))
 
         mock_logger.error.assert_called_once()
         assert "CIK0000111111.json" in mock_logger.error.call_args.args[1]
@@ -635,7 +635,7 @@ class TestDiscoverHistorical:
             zf.writestr("CIK0000111111.json", b"not valid json {")
         zb = buf.getvalue()
         client = _make_historical_client(mocker, zb)
-        result = HistoricalDiscovery(client, [".*"]).discover("fake://path.zip")
+        result = list(HistoricalDiscovery(client, [".*"]).discover("fake://path.zip"))
 
         assert result == []
 
@@ -646,7 +646,7 @@ class TestDiscoverHistorical:
         zb = buf.getvalue()
         client = _make_historical_client(mocker, zb)
         mock_logger = mocker.patch("idi_sec_scraper.processor.discovery._logger")
-        HistoricalDiscovery(client, [".*"]).discover("fake://path.zip")
+        list(HistoricalDiscovery(client, [".*"]).discover("fake://path.zip"))
 
         mock_logger.error.assert_called_once()
         assert "CIK0000111111.json" in mock_logger.error.call_args.args[1]
@@ -796,7 +796,9 @@ class TestHistoricalDiscoveryCutoff:
         client = _make_historical_client(mocker, zb)
         # All Apple 10-K filings are in 2026; cutoff is after that
         cutoffs = {"10-?K": datetime.date(2027, 1, 1)}
-        result = HistoricalDiscovery(client, ["10-?K"], cutoffs=cutoffs).discover("fake://path.zip")
+        result = list(
+            HistoricalDiscovery(client, ["10-?K"], cutoffs=cutoffs).discover("fake://path.zip")
+        )
 
         assert result == []
 
@@ -812,7 +814,7 @@ class TestHistoricalDiscoveryCutoff:
     def test_no_cutoff_includes_all(self, mocker):
         zb = _make_zip({"CIK0000320193.json": _APPLE_CIK_JSON})
         client = _make_historical_client(mocker, zb)
-        result = HistoricalDiscovery(client, ["10-?K"]).discover("fake://path.zip")
+        result = list(HistoricalDiscovery(client, ["10-?K"]).discover("fake://path.zip"))
 
         assert len(result) == 2
 

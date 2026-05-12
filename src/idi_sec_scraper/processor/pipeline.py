@@ -4,11 +4,9 @@
 import dataclasses
 import datetime
 from abc import ABC, abstractmethod
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections.abc import Iterable
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from typing import Any
-
-# Third party imports
-from tqdm import tqdm
 
 # Application imports
 from idi_sec_scraper.common.api import SecClient
@@ -97,16 +95,12 @@ class Pipeline(ABC):
         self.failure_registry = FailureRegistry(config.failure_file, self._failure_classifier)
 
     @abstractmethod
-    def load_input(self) -> list[DiscoveredFiling]:
-        """Discover filings to scrape.
-
-        Returns:
-            List of :class:`DiscoveredFiling` objects.
-        """
+    def load_input(self) -> Iterable[DiscoveredFiling]:
+        """Discover filings to scrape."""
         ...
 
     @abstractmethod
-    def process(self, filings: list[DiscoveredFiling]) -> None:
+    def process(self, filings: Iterable[DiscoveredFiling]) -> None:
         """Scrape each filing and write manifests.
 
         Args:
@@ -149,13 +143,8 @@ class SECScraperPipeline(Pipeline, ABC):
         start_time = datetime.datetime.now()
         self.logger.info("Starting pipeline run at %s", start_time)
 
-        discovery_start = datetime.datetime.now()
-        self.logger.info("Starting discovery at %s", discovery_start)
-        filings = self.load_input()
-        self.stats.discovery_elapsed = datetime.datetime.now() - discovery_start
-
         scraping_start = datetime.datetime.now()
-        self.logger.info("Starting scraping at %s", scraping_start)
+        filings = self.load_input()
         self.process(filings)
         self.stats.scraping_elapsed = datetime.datetime.now() - scraping_start
 
@@ -167,51 +156,87 @@ class SECScraperPipeline(Pipeline, ABC):
         """Construct and return the discovery instance for this pipeline variant."""
         ...
 
-    def process(self, filings: list[DiscoveredFiling]) -> None:
+    def process(self, filings: Iterable[DiscoveredFiling]) -> None:
         """Scrape each filing, writing index HTML, documents, and manifests to S3.
 
         Known failures and fully-cached filings are counted as skipped; new
         failures increment the failed counter. Scraped filings are flushed
         incrementally to the bucket manifest via :attr:`manifest_writer`.
 
+        Uses a sliding window of at most ``max_workers * 2`` in-flight futures
+        so that the full filings iterable is never materialised in memory.
+
         Args:
             filings: Filings to scrape.
         """
-        with ThreadPoolExecutor(max_workers=self.config.max_workers) as executor:
-            future_to_filing = {}
-            for filing in filings:
-                self.stats.increment("total_filings")
-                form_type_entry = find_form_type_entry(
-                    filing.form_type, self.document_filter_config
-                )
-                if form_type_entry is not None:
-                    self.stats.increment_form_type("form_type_filings_total", form_type_entry[0])
-                failure_key = (filing.cik, filing.accession_number)
-                if failure_key in self.failure_registry:
-                    self.logger.warning(
-                        "Skipping known failure: %s / %s", filing.cik, filing.accession_number
-                    )
-                    self.stats.increment("skipped_filings")
-                    continue
-                future_to_filing[executor.submit(self._scrape_filing, filing)] = filing
+        MAX_IN_FLIGHT = self.config.max_workers * 2
+        filings_iter = iter(filings)
+        pending: set[Future] = set()
+        processed = 0
 
-            total = len(future_to_filing)
-            self.logger.info("Starting scrape: %d filings to process", total)
-            for i, future in enumerate(
-                tqdm(as_completed(future_to_filing), total=total, desc="Scraping filings"), 1
-            ):
-                result = future.result()
-                if result is None:
-                    self.stats.increment("failed_filings")
-                elif result[1]:
-                    self.stats.increment("skipped_filings")
-                else:
-                    self.manifest_writer.add(result[0])
-                    self.stats.increment("scraped_filings")
-                if i % 1000 == 0 or i == total:
-                    self.logger.info(
-                        "Scraping progress: %d / %d filings (%.1f%%)", i, total, 100 * i / total
+        with ThreadPoolExecutor(max_workers=self.config.max_workers) as executor:
+
+            def _submit_next() -> Future | None:
+                """Pull from the iterator, skip known failures, submit the next work item."""
+                while True:
+                    filing = next(filings_iter, None)
+                    if filing is None:
+                        return None
+                    self.stats.increment("total_filings")
+                    form_type_entry = find_form_type_entry(
+                        filing.form_type, self.document_filter_config
                     )
+                    if form_type_entry is not None:
+                        self.stats.increment_form_type(
+                            "form_type_filings_total", form_type_entry[0]
+                        )
+                    failure_key = (filing.cik, filing.accession_number)
+                    if failure_key in self.failure_registry:
+                        self.logger.warning(
+                            "Skipping known failure: %s / %s", filing.cik, filing.accession_number
+                        )
+                        self.stats.increment("skipped_filings")
+                        continue
+                    return executor.submit(self._scrape_filing, filing)
+
+            for _ in range(MAX_IN_FLIGHT):
+                f = _submit_next()
+                if f is None:
+                    break
+                pending.add(f)
+
+            self.logger.info("Starting scrape")
+            while pending:
+                done, _ = wait(pending, return_when=FIRST_COMPLETED)
+                for future in done:
+                    pending.discard(future)
+                    result = future.result()
+                    if result is None:
+                        self.stats.increment("failed_filings")
+                    elif result[1]:
+                        self.stats.increment("skipped_filings")
+                    else:
+                        self.manifest_writer.add(result[0])
+                        self.stats.increment("scraped_filings")
+                    processed += 1
+                    if processed % 1000 == 0:
+                        if self.discovery.total_ciks > 0:
+                            self.logger.info(
+                                "Scraping progress: %d filings processed, "
+                                "%d / %d CIK files scanned (%.1f%%)",
+                                processed,
+                                self.discovery.ciks_scanned,
+                                self.discovery.total_ciks,
+                                100 * self.discovery.ciks_scanned / self.discovery.total_ciks,
+                            )
+                        else:
+                            self.logger.info(
+                                "Scraping progress: %d filings processed", processed
+                            )
+                    f = _submit_next()
+                    if f is not None:
+                        pending.add(f)
+
         self.failure_registry.flush()
         self.manifest_writer.flush()
 
@@ -239,7 +264,6 @@ class SECScraperPipeline(Pipeline, ABC):
                 self.stats.form_type_documents_total.get(form_type_key, 0),
             )
         self.logger.info("  Timing")
-        self.logger.info("    Discovery: %s", self.stats.discovery_elapsed)
         self.logger.info("    Scraping:  %s", self.stats.scraping_elapsed)
         self.logger.info("  Config")
         self.logger.info("    rate_limit: %s", self.sec_client._rate_limit)
@@ -428,12 +452,8 @@ class HistoricalSECScraperPipeline(SECScraperPipeline):
             self.sec_client, patterns, self.failure_registry, cutoffs=cutoffs
         )
 
-    def load_input(self) -> list[DiscoveredFiling]:
-        """Discover filings from the submissions.zip archive.
-
-        Returns:
-            List of :class:`DiscoveredFiling` objects.
-        """
+    def load_input(self) -> Iterable[DiscoveredFiling]:
+        """Discover filings from the submissions.zip archive."""
         submissions_url = self.config.submissions_url
         # If the submissions.zip is not in s3 already, download it to s3 first
         if submissions_url.startswith("https://"):
@@ -460,10 +480,6 @@ class DailySECScraperPipeline(SECScraperPipeline):
         cutoffs = {ft.match: ft.cutoff_date for ft in ft_configs}
         return DailyDiscovery(self.sec_client, patterns, cutoffs=cutoffs)
 
-    def load_input(self) -> list[DiscoveredFiling]:
-        """Discover filings from daily crawler indexes.
-
-        Returns:
-            List of :class:`DiscoveredFiling` objects.
-        """
+    def load_input(self) -> Iterable[DiscoveredFiling]:
+        """Discover filings from daily crawler indexes."""
         return self.discovery.discover(self.config.start_date, self.config.end_date)
