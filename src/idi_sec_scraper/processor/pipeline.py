@@ -3,7 +3,6 @@
 # Standard library imports
 import dataclasses
 import datetime
-import re
 from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
@@ -31,6 +30,7 @@ from idi_sec_scraper.processor.document_filters import (
 from idi_sec_scraper.processor.failures import FailureType, SECScraperFailureClassifier
 from idi_sec_scraper.processor.manifest import update_bucket_manifest
 from idi_sec_scraper.processor.parser import parse_index_htm
+from idi_sec_scraper.processor.paths import filing_s3_prefix
 from idi_sec_scraper.processor.types import (
     DiscoveredFiling,
     DocumentFilterConfig,
@@ -39,16 +39,6 @@ from idi_sec_scraper.processor.types import (
     ScrapedDocument,
     ScrapedFiling,
 )
-
-# Matches any character not in the S3-safe set; used to sanitise form types for S3 paths.
-_SAFE_RE = re.compile(r"[^0-9a-zA-Z!._*'()-]")
-
-
-def _s3_prefix(bucket: str, filing: DiscoveredFiling) -> str:
-    """Return the S3 prefix (no trailing slash) for all files belonging to a filing."""
-    form_type_safe = _SAFE_RE.sub("_", filing.form_type)
-    accession_nodash = filing.accession_number.replace("-", "")
-    return f"s3://{bucket}/{filing.filing_date}/{form_type_safe}/{filing.cik}/{accession_nodash}"
 
 
 def _new_scraped_filing(filing: DiscoveredFiling) -> ScrapedFiling:
@@ -308,7 +298,7 @@ class SECScraperPipeline(Pipeline, ABC):
     def _scrape_filing_inner(self, filing: DiscoveredFiling) -> tuple[ScrapedFiling, bool] | None:
         failure_key = (filing.cik, filing.accession_number)
 
-        prefix = _s3_prefix(self.config.bucket, filing)
+        prefix = filing_s3_prefix(self.config.bucket, filing)
 
         fetch_result = self._fetch_or_load_filing_index(filing, prefix)
         if fetch_result is None:

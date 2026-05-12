@@ -7,11 +7,11 @@ import datetime
 # Application imports
 from idi_sec_scraper.processor.document_filters import FormTypeConfig
 from idi_sec_scraper.processor.failures import FailureType
+from idi_sec_scraper.processor.paths import filing_s3_prefix
 from idi_sec_scraper.processor.pipeline import (
     DailySECScraperPipeline,
     HistoricalSECScraperPipeline,
     _new_scraped_filing,
-    _s3_prefix,
     _scraped_filing_from_dict,
 )
 from idi_sec_scraper.processor.types import (
@@ -61,25 +61,25 @@ def _make_pipeline(mocker, cls, config):
 # ---------------------------------------------------------------------------
 
 
-class TestS3Prefix:
-    """Tests for _s3_prefix()."""
+class TestFilingS3Prefix:
+    """Tests for filing_s3_prefix()."""
 
     def test_structure(self):
-        prefix = _s3_prefix(_BUCKET, _FILING)
-        assert prefix == ("s3://test-bucket/2026-02-24/8-K/320193/000114036126006577")
+        prefix = filing_s3_prefix(_BUCKET, _FILING)
+        assert prefix == ("s3://test-bucket/sec/2026-02-24/8-K/320193/000114036126006577")
 
     def test_unsafe_form_type_chars_replaced(self):
         filing = dataclasses.replace(_FILING, form_type="10-K/A")
-        prefix = _s3_prefix(_BUCKET, filing)
+        prefix = filing_s3_prefix(_BUCKET, filing)
         assert "/10-K_A/" in prefix
 
     def test_space_in_form_type_replaced(self):
         filing = dataclasses.replace(_FILING, form_type="SCHEDULE 13G/A")
-        prefix = _s3_prefix(_BUCKET, filing)
+        prefix = filing_s3_prefix(_BUCKET, filing)
         assert "/SCHEDULE_13G_A/" in prefix
 
     def test_accession_number_dashes_removed(self):
-        prefix = _s3_prefix(_BUCKET, _FILING)
+        prefix = filing_s3_prefix(_BUCKET, _FILING)
         assert "000114036126006577" in prefix
         assert "0001140361-26-006577" not in prefix
 
@@ -955,9 +955,9 @@ class TestProcess:
         )
         pipeline.sec_client.query_endpoint.return_value = {"status_code": 200, "data": "<html/>"}
 
-        results = pipeline.process([_FILING])
+        result = pipeline.process([_FILING])
 
-        assert len(results) == 1
+        assert len(result) == 1
         assert pipeline.stats.scraped_filings == 1
         assert pipeline.stats.failed_filings == 0
         assert pipeline.stats.form_type_filings_total["8-K"] == 1
@@ -979,9 +979,9 @@ class TestProcess:
         )
         pipeline.sec_client.query_endpoint.return_value = {"status_code": 404, "error": "Not Found"}
 
-        results = pipeline.process([_FILING])
+        result = pipeline.process([_FILING])
 
-        assert results == []
+        assert len(result) == 0
         assert pipeline.stats.failed_filings == 1
         assert pipeline.stats.skipped_filings == 0
         assert pipeline.stats.form_type_filings_total["8-K"] == 1
@@ -1018,9 +1018,9 @@ class TestProcess:
             ),
         )
 
-        results = pipeline.process([_FILING])
+        result = pipeline.process([_FILING])
 
-        assert results == []
+        assert len(result) == 0
         assert pipeline.stats.skipped_filings == 1
         assert pipeline.stats.scraped_filings == 0
         assert pipeline.stats.failed_filings == 0
@@ -1051,8 +1051,8 @@ class TestProcess:
         )
         pipeline.sec_client.query_endpoint.return_value = {"status_code": 200, "data": "content"}
 
-        results = pipeline.process([_FILING])
+        result = pipeline.process([_FILING])
 
-        assert len(results) == 1
+        assert len(result) == 1
         assert pipeline.stats.scraped_filings == 1
         assert pipeline.stats.skipped_filings == 0

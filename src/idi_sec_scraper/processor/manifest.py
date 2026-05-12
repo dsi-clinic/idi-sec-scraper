@@ -5,6 +5,7 @@ import pandas as pd
 
 # Application imports
 from idi_sec_scraper.common.logs import get_logger
+from idi_sec_scraper.processor.paths import manifest_s3_path
 from idi_sec_scraper.processor.types import ScrapedFiling
 
 _logger = get_logger(__name__)
@@ -50,7 +51,7 @@ def update_bucket_manifest(bucket: str, filings: list[ScrapedFiling]) -> None:
     """Append new filing documents to the bucket-level manifest parquet file.
 
     Reads the existing manifest (if any), merges with new rows, deduplicates
-    on ``s3_key``, and writes the result back to ``s3://{bucket}/manifest.parquet``.
+    on ``s3_key``, and writes the result back to ``s3://{bucket}/sec/manifest.parquet``.
 
     Args:
         bucket: S3 bucket name (without protocol prefix).
@@ -60,7 +61,7 @@ def update_bucket_manifest(bucket: str, filings: list[ScrapedFiling]) -> None:
     if new_df.empty:
         return
 
-    manifest_path = f"s3://{bucket}/manifest.parquet"
+    manifest_path = manifest_s3_path(bucket)
 
     try:
         existing_df = pd.read_parquet(manifest_path)

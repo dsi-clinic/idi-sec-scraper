@@ -134,14 +134,14 @@ class TestUpdateBucketManifest:
         read_mock.assert_not_called()
         write_mock.assert_not_called()
 
-    def test_creates_new_manifest_when_none_exists(self, mocker, tmp_path):
+    def test_creates_new_manifest_when_none_exists(self, mocker):
         mocker.patch(
             "idi_sec_scraper.processor.manifest.pd.read_parquet",
             side_effect=FileNotFoundError,
         )
         written: list[pd.DataFrame] = []
 
-        def capture_write(self_df: pd.DataFrame, path: str, **kwargs: object) -> None:
+        def capture_write(self_df: pd.DataFrame, _path: str, **_kwargs: object) -> None:
             written.append(self_df.copy())
 
         mocker.patch("pandas.DataFrame.to_parquet", capture_write)
@@ -174,7 +174,7 @@ class TestUpdateBucketManifest:
         mocker.patch("idi_sec_scraper.processor.manifest.pd.read_parquet", return_value=existing)
         written: list[pd.DataFrame] = []
 
-        def capture_write(self_df: pd.DataFrame, path: str, **kwargs: object) -> None:
+        def capture_write(self_df: pd.DataFrame, _path: str, **_kwargs: object) -> None:
             written.append(self_df.copy())
 
         mocker.patch("pandas.DataFrame.to_parquet", capture_write)
@@ -225,10 +225,10 @@ class TestUpdateBucketManifest:
         )
         paths: list[str] = []
 
-        def capture_write(self_df: pd.DataFrame, path: str, **kwargs: object) -> None:
+        def capture_write(_self_df: pd.DataFrame, path: str, **_kwargs: object) -> None:
             paths.append(path)
 
         mocker.patch("pandas.DataFrame.to_parquet", capture_write)
         update_bucket_manifest("my-bucket", [_FILING])
 
-        assert paths == ["s3://my-bucket/manifest.parquet"]
+        assert paths == ["s3://my-bucket/sec/manifest.parquet"]
