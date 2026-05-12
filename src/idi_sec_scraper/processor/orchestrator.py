@@ -33,6 +33,12 @@ def main() -> None:
         default=8,
         help="Number of concurrent filing threads (default: 8)",
     )
+    parser.add_argument(
+        "--manifest-flush-every",
+        type=int,
+        default=1000,
+        help="Number of scraped filings to buffer before writing to the bucket manifest (default: 1000)",
+    )
 
     parser.add_argument("--bucket", required=True, help="S3 bucket name")
     parser.add_argument(
@@ -79,6 +85,7 @@ def main() -> None:
             document_filters_path=args.document_filters,
             failure_file=args.failure_file,
             max_workers=args.max_workers,
+            manifest_flush_every=args.manifest_flush_every,
             submissions_url=args.submissions_url,
             max_ciks=args.max_ciks,
         )
@@ -89,6 +96,7 @@ def main() -> None:
             document_filters_path=args.document_filters,
             failure_file=args.failure_file,
             max_workers=args.max_workers,
+            manifest_flush_every=args.manifest_flush_every,
             start_date=args.start_date,
             end_date=args.end_date,
         )

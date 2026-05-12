@@ -7,6 +7,9 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
+# Third party imports
+from tqdm import tqdm
+
 # Application imports
 from idi_sec_scraper.common.api import SecClient
 from idi_sec_scraper.common.failures import FailureRegistry
@@ -103,14 +106,11 @@ class Pipeline(ABC):
         ...
 
     @abstractmethod
-    def process(self, filings: list[DiscoveredFiling]) -> list[ScrapedFiling]:
-        """Scrape each filing and return manifests.
+    def process(self, filings: list[DiscoveredFiling]) -> None:
+        """Scrape each filing and write manifests.
 
         Args:
             filings: Filings returned by :meth:`load_input`.
-
-        Returns:
-            List of :class:`ScrapedFiling` manifests.
         """
         ...
 
@@ -140,6 +140,9 @@ class SECScraperPipeline(Pipeline, ABC):
         """
         super().__init__(config, sec_client)
         self.discovery = self._make_discovery()
+        self.manifest_writer = ManifestWriter(
+            config.bucket, flush_every=config.manifest_flush_every
+        )
 
     def run(self) -> None:
         """Execute the full pipeline: load → process → update manifest → display stats."""
@@ -153,10 +156,9 @@ class SECScraperPipeline(Pipeline, ABC):
 
         scraping_start = datetime.datetime.now()
         self.logger.info("Starting scraping at %s", scraping_start)
-        scraped = self.process(filings)
+        self.process(filings)
         self.stats.scraping_elapsed = datetime.datetime.now() - scraping_start
 
-        update_bucket_manifest(self.config.bucket, scraped)
         self.display_stats()
         self.logger.info("Elapsed time: %s", datetime.datetime.now() - start_time)
 
@@ -165,20 +167,16 @@ class SECScraperPipeline(Pipeline, ABC):
         """Construct and return the discovery instance for this pipeline variant."""
         ...
 
-    def process(self, filings: list[DiscoveredFiling]) -> list[ScrapedFiling]:
+    def process(self, filings: list[DiscoveredFiling]) -> None:
         """Scrape each filing, writing index HTML, documents, and manifests to S3.
 
         Known failures and fully-cached filings are counted as skipped; new
-        failures increment the failed counter.
+        failures increment the failed counter. Scraped filings are flushed
+        incrementally to the bucket manifest via :attr:`manifest_writer`.
 
         Args:
             filings: Filings to scrape.
-
-        Returns:
-            List of :class:`ScrapedFiling` objects for filings where new work
-            was done this run (excludes known failures and fully-cached filings).
         """
-        results = []
         with ThreadPoolExecutor(max_workers=self.config.max_workers) as executor:
             future_to_filing = {}
             for filing in filings:
@@ -199,21 +197,23 @@ class SECScraperPipeline(Pipeline, ABC):
 
             total = len(future_to_filing)
             self.logger.info("Starting scrape: %d filings to process", total)
-            for i, future in enumerate(as_completed(future_to_filing), 1):
+            for i, future in enumerate(
+                tqdm(as_completed(future_to_filing), total=total, desc="Scraping filings"), 1
+            ):
                 result = future.result()
                 if result is None:
                     self.stats.increment("failed_filings")
                 elif result[1]:
                     self.stats.increment("skipped_filings")
                 else:
-                    results.append(result[0])
+                    self.manifest_writer.add(result[0])
                     self.stats.increment("scraped_filings")
                 if i % 1000 == 0 or i == total:
                     self.logger.info(
                         "Scraping progress: %d / %d filings (%.1f%%)", i, total, 100 * i / total
                     )
         self.failure_registry.flush()
-        return results
+        self.manifest_writer.flush()
 
     def display_stats(self) -> None:
         """Log a formatted summary of pipeline statistics."""

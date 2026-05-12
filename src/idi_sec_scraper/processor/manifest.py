@@ -1,5 +1,8 @@
 """Bucket-level manifest utilities."""
 
+# Standard library imports
+import threading
+
 # Third party imports
 import pandas as pd
 
@@ -72,3 +75,45 @@ def update_bucket_manifest(bucket: str, filings: list[ScrapedFiling]) -> None:
     combined = combined.drop_duplicates(subset=["s3_key"], keep="last")
     combined.to_parquet(manifest_path, index=False)
     _logger.info("Wrote %d rows to bucket manifest (%s)", len(combined), manifest_path)
+
+
+class ManifestWriter:
+    """Buffers scraped filings and periodically flushes them to the bucket manifest.
+
+    Thread-safe. Flushes automatically every ``flush_every`` filings added, and
+    on an explicit :meth:`flush` call (e.g. at end of pipeline run).
+
+    Args:
+        bucket: S3 bucket name (without protocol prefix).
+        flush_every: Number of filings to buffer before an automatic flush.
+    """
+
+    def __init__(self, bucket: str, flush_every: int = 1000) -> None:
+        """Initialize the ManifestWriter."""
+        self.bucket = bucket
+        self._flush_every = flush_every
+        self._buffer: list[ScrapedFiling] = []
+        self._lock = threading.RLock()
+
+    def add(self, filing: ScrapedFiling) -> None:
+        """Add a scraped filing to the buffer, flushing if the threshold is reached.
+
+        Args:
+            filing: A successfully scraped filling to include in the manifest.
+        """
+        with self._lock:
+            self._buffer.append(filing)
+            if len(self._buffer) >= self._flush_every:
+                self._flush_locked()
+
+    def flush(self) -> None:
+        """Write all buffered filings to the manifest and clear the buffer."""
+        with self._lock:
+            self._flush_locked()
+
+    def _flush_locked(self) -> None:
+        """Flush under the lock — caller must already hold ``self._lock``."""
+        if not self._buffer:
+            return
+        update_bucket_manifest(self.bucket, self._buffer)
+        self._buffer.clear()

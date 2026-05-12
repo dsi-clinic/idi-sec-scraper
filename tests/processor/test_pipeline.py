@@ -46,11 +46,12 @@ _FILING = DiscoveredFiling(
 
 
 def _make_pipeline(mocker, cls, config):
-    """Instantiate a pipeline with a mocked document filter load."""
+    """Instantiate a pipeline with a mocked document filter load and manifest writer."""
     mocker.patch(
         "idi_sec_scraper.processor.pipeline.load_document_filters",
         return_value=mocker.MagicMock(form_types={}),
     )
+    mocker.patch("idi_sec_scraper.processor.pipeline.ManifestWriter")
     sec_client = mocker.MagicMock()
     sec_client.SEC_HEADERS = {}
     return cls(config, sec_client)
@@ -998,6 +999,7 @@ class TestProcess:
             "idi_sec_scraper.processor.pipeline.load_document_filters",
             return_value=DocumentFilterConfig(form_types={"8-K": FormTypeConfig(match="8-K")}),
         )
+        mocker.patch("idi_sec_scraper.processor.pipeline.ManifestWriter")
         _patch_scrape_deps(mocker, docs=[_DOC])
         sec_client = mocker.MagicMock()
         sec_client.SEC_HEADERS = {}
@@ -1007,9 +1009,9 @@ class TestProcess:
         )
         pipeline.sec_client.query_endpoint.return_value = {"status_code": 200, "data": "<html/>"}
 
-        result = pipeline.process([_FILING])
+        pipeline.process([_FILING])
 
-        assert len(result) == 1
+        assert pipeline.manifest_writer.add.call_count == 1
         assert pipeline.stats.scraped_filings == 1
         assert pipeline.stats.failed_filings == 0
         assert pipeline.stats.form_type_filings_total["8-K"] == 1
@@ -1022,6 +1024,7 @@ class TestProcess:
             "idi_sec_scraper.processor.pipeline.load_document_filters",
             return_value=DocumentFilterConfig(form_types={"8-K": FormTypeConfig(match="8-K")}),
         )
+        mocker.patch("idi_sec_scraper.processor.pipeline.ManifestWriter")
         _patch_scrape_deps(mocker)
         sec_client = mocker.MagicMock()
         sec_client.SEC_HEADERS = {}
@@ -1031,9 +1034,9 @@ class TestProcess:
         )
         pipeline.sec_client.query_endpoint.return_value = {"status_code": 404, "error": "Not Found"}
 
-        result = pipeline.process([_FILING])
+        pipeline.process([_FILING])
 
-        assert len(result) == 0
+        pipeline.manifest_writer.add.assert_not_called()
         assert pipeline.stats.failed_filings == 1
         assert pipeline.stats.skipped_filings == 0
         assert pipeline.stats.form_type_filings_total["8-K"] == 1
@@ -1070,9 +1073,9 @@ class TestProcess:
             ),
         )
 
-        result = pipeline.process([_FILING])
+        pipeline.process([_FILING])
 
-        assert len(result) == 0
+        pipeline.manifest_writer.add.assert_not_called()
         assert pipeline.stats.skipped_filings == 1
         assert pipeline.stats.scraped_filings == 0
         assert pipeline.stats.failed_filings == 0
@@ -1103,8 +1106,8 @@ class TestProcess:
         )
         pipeline.sec_client.query_endpoint.return_value = {"status_code": 200, "data": "content"}
 
-        result = pipeline.process([_FILING])
+        pipeline.process([_FILING])
 
-        assert len(result) == 1
+        assert pipeline.manifest_writer.add.call_count == 1
         assert pipeline.stats.scraped_filings == 1
         assert pipeline.stats.skipped_filings == 0
