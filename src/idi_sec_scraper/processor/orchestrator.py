@@ -65,19 +65,40 @@ def main() -> None:
     daily = subparsers.add_parser("daily", help="Run daily pipeline")
     daily.add_argument(
         "--start-date",
-        required=True,
+        default=None,
         type=datetime.date.fromisoformat,
-        help="Start date inclusive (YYYY-MM-DD)",
+        help=(
+            "Start date inclusive (YYYY-MM-DD). "
+            "If omitted, both --start-date and --end-date default to yesterday. "
+            "If either is supplied, both are required."
+        ),
     )
     daily.add_argument(
         "--end-date",
-        required=True,
+        default=None,
         type=datetime.date.fromisoformat,
-        help="End date inclusive (YYYY-MM-DD)",
+        help=(
+            "End date inclusive (YYYY-MM-DD). "
+            "If omitted, both --start-date and --end-date default to yesterday. "
+            "If either is supplied, both are required."
+        ),
     )
 
     args = parser.parse_args()
     sec_client = SecClient(rate_limit=args.rate_limit)
+
+    if args.mode == "daily":
+        # If neither date is given, default both to yesterday.
+        # If exactly one is given, require the other — mixing an explicit date
+        # with a yesterday default can silently produce start > end.
+        if args.start_date is None and args.end_date is None:
+            yesterday = datetime.date.today() - datetime.timedelta(days=1)
+            args.start_date = yesterday
+            args.end_date = yesterday
+        elif args.start_date is None:
+            parser.error("--start-date is required when --end-date is provided")
+        elif args.end_date is None:
+            parser.error("--end-date is required when --start-date is provided")
 
     if args.mode == "historical":
         config = HistoricalPipelineConfig(
