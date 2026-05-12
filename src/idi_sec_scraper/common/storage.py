@@ -2,14 +2,45 @@
 
 # Standard library imports
 import json
+import os
+import pathlib
 import tempfile
+import threading
 import zipfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 
 # Third party imports
+import boto3
+import botocore.config
 import smart_open
 from botocore.exceptions import ClientError
+
+_s3_client = None
+_s3_client_lock = threading.Lock()
+
+
+def _get_s3_client() -> boto3.client:
+    """Return a shared S3 client, created once per process.
+
+    Shared so TLS connections are established once and reused across threads.
+    Pool sized to max_workers (default 15) so no thread ever waits for a slot.
+    boto3 auto-discovers AWS_ENDPOINT_URL, credentials, and region from env.
+    """
+    global _s3_client
+    if _s3_client is None:
+        with _s3_client_lock:
+            if _s3_client is None:
+                max_workers = int(os.environ.get("MAX_WORKERS", "15"))
+                cfg = botocore.config.Config(max_pool_connections=max_workers)
+                _s3_client = boto3.session.Session().client("s3", config=cfg)
+    return _s3_client
+
+
+def _s3_tp(extra: dict | None = None) -> dict:
+    params = dict(extra or {})
+    params["client"] = _get_s3_client()
+    return params
 
 
 def _empty_for_return_type(return_type: str) -> dict | list:
@@ -44,7 +75,7 @@ def load_json(file_path: str, return_type: str = "dict") -> dict | list:
         json.JSONDecodeError: If the file exists but contains invalid JSON.
     """
     try:
-        with smart_open.open(file_path) as f:
+        with smart_open.open(file_path, transport_params=_s3_tp()) as f:
             return json.load(f)
 
     except (FileNotFoundError, OSError):
@@ -71,8 +102,9 @@ def save_json(file_path: str, data: dict | list, mode: str = "w") -> None:
     try:
         if "s3://" in file_path:
             with tempfile.NamedTemporaryFile() as tmp:
-                tp = {"writebuffer": tmp}
-                with smart_open.open(file_path, "w", transport_params=tp) as fout:
+                with smart_open.open(
+                    file_path, "w", transport_params=_s3_tp({"writebuffer": tmp})
+                ) as fout:
                     json.dump(data, fout, indent=2)
         else:
             with smart_open.open(file_path, mode) as fout:
@@ -84,7 +116,8 @@ def save_json(file_path: str, data: dict | list, mode: str = "w") -> None:
 def key_exists(file_path: str) -> bool:
     """Return True if the file at the given path exists.
 
-    Supports local filesystem paths and ``s3://`` URLs.
+    Supports local filesystem paths and ``s3://`` URLs. Uses HeadObject for S3
+    to avoid opening a read stream.
 
     Args:
         file_path: Local path or ``s3://`` URL to check.
@@ -93,14 +126,15 @@ def key_exists(file_path: str) -> bool:
         True if the file exists, False if it does not.
 
     Raises:
-        botocore.exceptions.ClientError: If an S3 error other than ``NoSuchKey`` occurs.
+        botocore.exceptions.ClientError: If an S3 error other than ``NoSuchKey``/404 occurs.
     """
+    if not file_path.startswith("s3://"):
+        return pathlib.Path(file_path).exists()
+    without_scheme = file_path[5:]
+    bucket, _, key = without_scheme.partition("/")
     try:
-        with smart_open.open(file_path, "rb") as f:
-            f.read(1)
+        _get_s3_client().head_object(Bucket=bucket, Key=key)
         return True
-    except (FileNotFoundError, OSError):
-        return False
     except ClientError as e:
         if e.response.get("Error", {}).get("Code") in ("NoSuchKey", "404"):
             return False
@@ -122,7 +156,7 @@ def load_content(file_path: str) -> str:
         botocore.exceptions.ClientError: If an S3 error other than ``NoSuchKey`` occurs.
     """
     try:
-        with smart_open.open(file_path) as f:
+        with smart_open.open(file_path, transport_params=_s3_tp()) as f:
             return f.read()
     except (FileNotFoundError, OSError):
         return ""
@@ -142,14 +176,27 @@ def save_content(file_path: str, content: str) -> None:
     try:
         if "s3://" in file_path:
             with tempfile.NamedTemporaryFile() as tmp:
-                tp = {"writebuffer": tmp}
-                with smart_open.open(file_path, "w", transport_params=tp) as fout:
+                with smart_open.open(
+                    file_path, "w", transport_params=_s3_tp({"writebuffer": tmp})
+                ) as fout:
                     fout.write(content)
         else:
             with smart_open.open(file_path, "w") as fout:
                 fout.write(content)
     except ValueError as e:
         raise ValueError(f"Failed to save content to {file_path!r}: {e}") from e
+
+
+def stream_to_s3(fileobj: object, s3_url: str) -> None:
+    """Stream a file-like object directly to S3 using multipart upload.
+
+    Args:
+        fileobj: Readable file-like object to upload.
+        s3_url: Destination ``s3://bucket/key`` URL.
+    """
+    without_scheme = s3_url[5:]
+    bucket, _, key = without_scheme.partition("/")
+    _get_s3_client().upload_fileobj(fileobj, bucket, key)
 
 
 @contextmanager

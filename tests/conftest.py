@@ -15,6 +15,15 @@ MINIO_REGION = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
 TEST_BUCKET = os.getenv("S3_BUCKET", "idi-sec-scraper")
 
 
+@pytest.fixture(scope="session", autouse=True)
+def reset_storage_client():
+    """Reset the shared S3 client so it's created fresh with the current env vars."""
+    import idi_sec_scraper.common.storage as storage
+
+    storage._s3_client = None
+    yield
+
+
 @pytest.fixture(scope="session")
 def s3_client():
     """Boto3 S3 client pointed at the local MinIO instance."""
