@@ -7,9 +7,6 @@ from abc import ABC, abstractmethod
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any
 
-# Third party imports
-from tqdm import tqdm
-
 # Application imports
 from idi_sec_scraper.common.api import SecClient
 from idi_sec_scraper.common.failures import FailureRegistry
@@ -29,7 +26,7 @@ from idi_sec_scraper.processor.document_filters import (
     select_and_filter_documents,
 )
 from idi_sec_scraper.processor.failures import FailureType, SECScraperFailureClassifier
-from idi_sec_scraper.processor.manifest import update_bucket_manifest
+from idi_sec_scraper.processor.manifest import ManifestWriter
 from idi_sec_scraper.processor.parser import parse_index_htm
 from idi_sec_scraper.processor.paths import filing_s3_prefix
 from idi_sec_scraper.processor.types import (
@@ -147,8 +144,18 @@ class SECScraperPipeline(Pipeline, ABC):
     def run(self) -> None:
         """Execute the full pipeline: load → process → update manifest → display stats."""
         start_time = datetime.datetime.now()
+        self.logger.info("Starting pipeline run at %s", start_time)
+
+        discovery_start = datetime.datetime.now()
+        self.logger.info("Starting discovery at %s", discovery_start)
         filings = self.load_input()
+        self.stats.discovery_elapsed = datetime.datetime.now() - discovery_start
+
+        scraping_start = datetime.datetime.now()
+        self.logger.info("Starting scraping at %s", scraping_start)
         scraped = self.process(filings)
+        self.stats.scraping_elapsed = datetime.datetime.now() - scraping_start
+
         update_bucket_manifest(self.config.bucket, scraped)
         self.display_stats()
         self.logger.info("Elapsed time: %s", datetime.datetime.now() - start_time)
@@ -190,9 +197,9 @@ class SECScraperPipeline(Pipeline, ABC):
                     continue
                 future_to_filing[executor.submit(self._scrape_filing, filing)] = filing
 
-            for future in tqdm(
-                as_completed(future_to_filing), total=len(future_to_filing), desc="Scraping filings"
-            ):
+            total = len(future_to_filing)
+            self.logger.info("Starting scrape: %d filings to process", total)
+            for i, future in enumerate(as_completed(future_to_filing), 1):
                 result = future.result()
                 if result is None:
                     self.stats.increment("failed_filings")
@@ -201,6 +208,10 @@ class SECScraperPipeline(Pipeline, ABC):
                 else:
                     results.append(result[0])
                     self.stats.increment("scraped_filings")
+                if i % 1000 == 0 or i == total:
+                    self.logger.info(
+                        "Scraping progress: %d / %d filings (%.1f%%)", i, total, 100 * i / total
+                    )
         self.failure_registry.flush()
         return results
 
@@ -227,6 +238,13 @@ class SECScraperPipeline(Pipeline, ABC):
                 self.stats.form_type_filings_total.get(form_type_key, 0),
                 self.stats.form_type_documents_total.get(form_type_key, 0),
             )
+        self.logger.info("  Timing")
+        self.logger.info("    Discovery: %s", self.stats.discovery_elapsed)
+        self.logger.info("    Scraping:  %s", self.stats.scraping_elapsed)
+        self.logger.info("  Config")
+        self.logger.info("    rate_limit: %s", self.sec_client._rate_limit)
+        for field in dataclasses.fields(self.config):
+            self.logger.info("    %s: %s", field.name, getattr(self.config, field.name))
         self.logger.info("=" * 40)
 
     def _fetch_or_load_filing_index(
@@ -313,11 +331,11 @@ class SECScraperPipeline(Pipeline, ABC):
 
         if failure_type is not None:
             self.logger.error(
-                "Parse validation failed (%s) for %s / %s (%s)",
+                "Parse validation failed (%s) for %s (%s / %s)",
                 failure_type,
+                filing.form_type,
                 filing.cik,
                 filing.accession_number,
-                filing.form_type,
             )
             scraped_filing.failure_reason = str(failure_type)
             scraped_filing.last_scraped_at = datetime.datetime.now(datetime.UTC).isoformat()
@@ -340,10 +358,10 @@ class SECScraperPipeline(Pipeline, ABC):
 
         if not filtered_docs:
             self.logger.error(
-                "No matching documents for %s / %s (%s)",
+                "No matching documents for %s (%s / %s)",
+                filing.form_type,
                 filing.cik,
                 filing.accession_number,
-                filing.form_type,
             )
             scraped_filing.failure_reason = str(FailureType.DOCUMENTS_MISSING)
             scraped_filing.last_scraped_at = datetime.datetime.now(datetime.UTC).isoformat()

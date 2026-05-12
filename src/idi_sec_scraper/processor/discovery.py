@@ -164,10 +164,17 @@ class HistoricalDiscovery(Discovery):
         filings = []
         with open_zip(submissions_url, headers=self.sec_client.SEC_HEADERS) as zf:
             names = zf.namelist()
+            cik_names = [n for n in names if n.startswith("CIK") and n.endswith(".json")]
             if max_ciks is not None:
-                names = [n for n in names if n.startswith("CIK") and n.endswith(".json")][:max_ciks]
-            for filename in names:
+                cik_names = cik_names[:max_ciks]
+            total = len(cik_names)
+            _logger.info("Starting discovery: %d CIK files to process", total)
+            for i, filename in enumerate(cik_names, 1):
                 filings.extend(self._parse_cik_file(zf, filename))
+                if i % 1000 == 0 or i == total:
+                    _logger.info(
+                        "Discovery progress: %d / %d CIK files (%.1f%%)", i, total, 100 * i / total
+                    )
         return filings
 
     def _parse_cik_file(self, zf: zipfile.ZipFile, filename: str) -> list[DiscoveredFiling]:
@@ -176,8 +183,12 @@ class HistoricalDiscovery(Discovery):
         if not (filename.startswith("CIK") and filename.endswith(".json")):
             return []
 
-        with zf.open(filename) as f:
-            data = json.load(f)
+        try:
+            with zf.open(filename) as f:
+                data = json.load(f)
+        except (EOFError, json.JSONDecodeError) as e:
+            _logger.error("Failed to read %s: %s", filename, e)
+            return []
 
         cik = str(int(data.get("cik", "") or 0)) if data.get("cik") else ""
         company_name = data.get("name", "")

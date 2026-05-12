@@ -611,6 +611,46 @@ class TestDiscoverHistorical:
         mock_logger.error.assert_called_once()
         assert "not found" in mock_logger.error.call_args.args[0]
 
+    def test_eof_error_in_cik_file_returns_empty(self, mocker):
+        zb = _make_zip({"CIK0000111111.json": _APPLE_CIK_JSON})
+        client = _make_historical_client(mocker, zb)
+        mocker.patch("idi_sec_scraper.processor.discovery.json.load", side_effect=EOFError())
+        result = HistoricalDiscovery(client, [".*"]).discover("fake://path.zip")
+
+        assert result == []
+
+    def test_eof_error_in_cik_file_logs_error(self, mocker):
+        zb = _make_zip({"CIK0000111111.json": _APPLE_CIK_JSON})
+        client = _make_historical_client(mocker, zb)
+        mocker.patch("idi_sec_scraper.processor.discovery.json.load", side_effect=EOFError())
+        mock_logger = mocker.patch("idi_sec_scraper.processor.discovery._logger")
+        HistoricalDiscovery(client, [".*"]).discover("fake://path.zip")
+
+        mock_logger.error.assert_called_once()
+        assert "CIK0000111111.json" in mock_logger.error.call_args.args[1]
+
+    def test_json_decode_error_in_cik_file_returns_empty(self, mocker):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("CIK0000111111.json", b"not valid json {")
+        zb = buf.getvalue()
+        client = _make_historical_client(mocker, zb)
+        result = HistoricalDiscovery(client, [".*"]).discover("fake://path.zip")
+
+        assert result == []
+
+    def test_json_decode_error_in_cik_file_logs_error(self, mocker):
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("CIK0000111111.json", b"not valid json {")
+        zb = buf.getvalue()
+        client = _make_historical_client(mocker, zb)
+        mock_logger = mocker.patch("idi_sec_scraper.processor.discovery._logger")
+        HistoricalDiscovery(client, [".*"]).discover("fake://path.zip")
+
+        mock_logger.error.assert_called_once()
+        assert "CIK0000111111.json" in mock_logger.error.call_args.args[1]
+
 
 class TestHistoricalDiscoverMaxCiks:
     """Tests for HistoricalDiscovery.discover() max_ciks parameter."""
