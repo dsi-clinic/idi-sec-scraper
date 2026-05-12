@@ -20,6 +20,7 @@ from idi_sec_scraper.common.storage import (
     load_json,
     save_content,
     save_json,
+    stream_to_s3,
 )
 from idi_sec_scraper.processor.discovery import DailyDiscovery, Discovery, HistoricalDiscovery
 from idi_sec_scraper.processor.document_filters import (
@@ -414,7 +415,20 @@ class HistoricalSECScraperPipeline(SECScraperPipeline):
         Returns:
             List of :class:`DiscoveredFiling` objects.
         """
-        return self.discovery.discover(self.config.submissions_url, self.config.max_ciks)
+        submissions_url = self.config.submissions_url
+        # If the submissions.zip is not in s3 already, download it to s3 first
+        if submissions_url.startswith("https://"):
+            s3_url = f"s3://{self.config.bucket}/sec/submissions.zip"
+            self.logger.info("Downloading submissions.zip from SEC to %s", s3_url)
+            response = self.sec_client.session.get(
+                submissions_url, headers=self.sec_client.SEC_HEADERS, stream=True
+            )
+            response.raise_for_status()
+            response.raw.decode_content = True
+            stream_to_s3(response.raw, s3_url)
+            self.logger.info("Download complete, reading from %s", s3_url)
+            submissions_url = s3_url
+        return self.discovery.discover(submissions_url, self.config.max_ciks)
 
 
 class DailySECScraperPipeline(SECScraperPipeline):

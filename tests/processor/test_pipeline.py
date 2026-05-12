@@ -253,6 +253,58 @@ class TestHistoricalLoadInput:
         )
         mock_cls.return_value.discover.assert_called_once_with("s3://bucket/submissions.zip", None)
 
+    def test_https_url_streams_to_s3_then_discovers_from_s3(self, mocker):
+        mocker.patch(
+            "idi_sec_scraper.processor.pipeline.load_document_filters",
+            return_value=mocker.MagicMock(form_types={}),
+        )
+        mock_cls = mocker.patch("idi_sec_scraper.processor.pipeline.HistoricalDiscovery")
+        mock_cls.return_value.discover.return_value = []
+        mock_stream = mocker.patch("idi_sec_scraper.processor.pipeline.stream_to_s3")
+        sec_client = mocker.MagicMock()
+        sec_client.SEC_HEADERS = {"User-Agent": "test"}
+        https_url = "https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
+        config = HistoricalPipelineConfig(
+            bucket=_BUCKET,
+            document_filters_path=_FILTERS_PATH,
+            submissions_url=https_url,
+        )
+        pipeline = HistoricalSECScraperPipeline(config, sec_client)
+        pipeline.load_input()
+
+        sec_client.session.get.assert_called_once_with(
+            https_url, headers={"User-Agent": "test"}, stream=True
+        )
+        mock_stream.assert_called_once_with(
+            sec_client.session.get.return_value.raw,
+            f"s3://{_BUCKET}/sec/submissions.zip",
+        )
+        mock_cls.return_value.discover.assert_called_once_with(
+            f"s3://{_BUCKET}/sec/submissions.zip", None
+        )
+
+    def test_s3_url_skips_download(self, mocker):
+        mocker.patch(
+            "idi_sec_scraper.processor.pipeline.load_document_filters",
+            return_value=mocker.MagicMock(form_types={}),
+        )
+        mock_cls = mocker.patch("idi_sec_scraper.processor.pipeline.HistoricalDiscovery")
+        mock_cls.return_value.discover.return_value = []
+        mock_stream = mocker.patch("idi_sec_scraper.processor.pipeline.stream_to_s3")
+        sec_client = mocker.MagicMock()
+        sec_client.SEC_HEADERS = {}
+        config = HistoricalPipelineConfig(
+            bucket=_BUCKET,
+            document_filters_path=_FILTERS_PATH,
+            submissions_url="s3://bucket/submissions.zip",
+        )
+        pipeline = HistoricalSECScraperPipeline(config, sec_client)
+        pipeline.load_input()
+
+        mock_stream.assert_not_called()
+        sec_client.session.get.assert_not_called()
+        mock_cls.return_value.discover.assert_called_once_with("s3://bucket/submissions.zip", None)
+
     def test_discovery_held_as_attribute(self, mocker):
         from idi_sec_scraper.processor.document_filters import DocumentFilterConfig, FormTypeConfig
 
