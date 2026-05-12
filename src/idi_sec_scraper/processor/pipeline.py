@@ -410,8 +410,9 @@ class SECScraperPipeline(Pipeline, ABC):
             new_doc_count += 1
 
         was_fully_cached = index_was_cached and new_doc_count == 0 and failed_doc_count == 0
-        scraped_filing.last_scraped_at = datetime.datetime.now(datetime.UTC).isoformat()
-        save_json(f"{prefix}/manifest.json", dataclasses.asdict(scraped_filing))
+        if not was_fully_cached:
+            scraped_filing.last_scraped_at = datetime.datetime.now(datetime.UTC).isoformat()
+            save_json(f"{prefix}/manifest.json", dataclasses.asdict(scraped_filing))
         return scraped_filing, was_fully_cached
 
 
