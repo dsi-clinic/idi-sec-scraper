@@ -19,8 +19,8 @@ def main() -> None:
     parser.add_argument(
         "--rate-limit",
         type=float,
-        default=0.2,
-        help="Minimum seconds between SEC requests (default: 0.2)",
+        default=0.15,
+        help="Minimum seconds between SEC requests (default: 0.15)",
     )
     parser.add_argument(
         "--failure-file",
@@ -30,8 +30,8 @@ def main() -> None:
     parser.add_argument(
         "--max-workers",
         type=int,
-        default=8,
-        help="Number of concurrent filing threads (default: 8)",
+        default=15,
+        help="Number of concurrent filing threads (default: 15)",
     )
     parser.add_argument(
         "--manifest-flush-every",

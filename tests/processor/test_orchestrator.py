@@ -70,7 +70,7 @@ class TestSharedArgs:
     def test_max_workers_default(self, mocker):
         mock_hist, _ = _run(mocker, ["--bucket", "b", "historical"])
         config = mock_hist.call_args.args[0]
-        assert config.max_workers == 8
+        assert config.max_workers == 15
 
     def test_max_workers_override(self, mocker):
         mock_hist, _ = _run(mocker, ["--bucket", "b", "--max-workers", "16", "historical"])

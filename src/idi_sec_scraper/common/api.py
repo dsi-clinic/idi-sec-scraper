@@ -220,10 +220,10 @@ class ApiClient(ABC):
 class SecClient(ApiClient):
     """API client for the SEC EDGAR archive, with built-in rate limiting."""
 
-    SEC_HEADERS = {"User-Agent": "Alice Duan aliceduan@uchicago.edu"}
+    SEC_HEADERS = {"User-Agent": "DSI Core Facility dsicorefacility_project8@uchicago.edu"}
     SEC_URL = "https://www.sec.gov/Archives/edgar/data"
 
-    def __init__(self, rate_limit: float = 0.2) -> None:
+    def __init__(self, rate_limit: float | None = 0.15) -> None:
         """Initializes the SEC API.
 
         Args:
