@@ -4,7 +4,7 @@ Imports all resource modules (creation order matters) and exports stack outputs.
 """
 
 # Import order matters: config first, then resources by dependency
-from infra import ecr, ecs, github_oidc, iam, logs, networking, scheduling, secrets
+from infra import ecr, ecs, iam, logs, networking, scheduling, secrets
 
 import pulumi
 
@@ -41,10 +41,6 @@ pulumi.export("task_definition_arn", ecs.task_definition.arn)
 # Secrets
 pulumi.export("sec_user_agent_secret_arn", secrets.sec_user_agent_secret.arn)
 pulumi.export("sec_user_agent_secret_name", secrets.sec_user_agent_secret.name)
-
-# GitHub OIDC
-pulumi.export("github_checks_role_arn", github_oidc.checks_role.arn)
-pulumi.export("github_deploy_role_arn", github_oidc.deploy_role.arn)
 
 # Scheduling
 pulumi.export("schedule_name", scheduling.schedule.name)
