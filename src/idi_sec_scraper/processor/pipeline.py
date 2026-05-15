@@ -8,10 +8,12 @@ from collections.abc import Iterable
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from typing import Any
 
+# Third party imports
+from idi_ftm2j_shared.failures import FailureRegistry
+from idi_ftm2j_shared.logs import get_logger
+
 # Application imports
 from idi_sec_scraper.common.api import SecClient
-from idi_sec_scraper.common.failures import FailureRegistry
-from idi_sec_scraper.common.logs import get_logger
 from idi_sec_scraper.common.storage import (
     key_exists,
     load_content,
@@ -230,9 +232,7 @@ class SECScraperPipeline(Pipeline, ABC):
                                 100 * self.discovery.ciks_scanned / self.discovery.total_ciks,
                             )
                         else:
-                            self.logger.info(
-                                "Scraping progress: %d filings processed", processed
-                            )
+                            self.logger.info("Scraping progress: %d filings processed", processed)
                     f = _submit_next()
                     if f is not None:
                         pending.add(f)

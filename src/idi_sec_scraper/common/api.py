@@ -9,13 +9,12 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 from typing import Any, Literal
 
-# Third party imports
 import requests
+
+# Third party imports
+from idi_ftm2j_shared.logs import get_logger
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-
-# Application imports
-from .logs import get_logger
 
 
 class ApiClient(ABC):

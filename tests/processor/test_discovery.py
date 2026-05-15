@@ -6,6 +6,9 @@ import io
 import json
 import zipfile
 
+# Third party imports
+from idi_ftm2j_shared.failures import FailureRegistry
+
 # Application imports
 from idi_sec_scraper.processor.discovery import (
     DailyDiscovery,
@@ -512,7 +515,6 @@ class TestDiscoverHistorical:
         assert "mismatched" in mock_logger.error.call_args.args[0]
 
     def test_mismatched_list_lengths_registers_failure(self, mocker):
-        from idi_sec_scraper.common.failures import FailureRegistry
         from idi_sec_scraper.processor.failures import SECScraperFailureClassifier
 
         bad = {
@@ -535,7 +537,6 @@ class TestDiscoverHistorical:
         assert ("111111", "CIK0000111111.json") in registry._entries
 
     def test_known_mismatched_cik_file_is_skipped(self, mocker):
-        from idi_sec_scraper.common.failures import FailureRegistry
         from idi_sec_scraper.processor.failures import SECScraperFailureClassifier
 
         zb = _make_zip({"CIK0000320193.json": _APPLE_CIK_JSON})
@@ -548,7 +549,6 @@ class TestDiscoverHistorical:
         assert result == []
 
     def test_missing_overflow_file_registers_failure(self, mocker):
-        from idi_sec_scraper.common.failures import FailureRegistry
         from idi_sec_scraper.processor.failures import SECScraperFailureClassifier
 
         data = {
@@ -567,7 +567,6 @@ class TestDiscoverHistorical:
         assert ("320193", "CIK0000320193-submissions-missing.json") in registry._entries
 
     def test_known_missing_overflow_file_is_skipped(self, mocker):
-        from idi_sec_scraper.common.failures import FailureRegistry
         from idi_sec_scraper.processor.failures import SECScraperFailureClassifier
 
         data = {

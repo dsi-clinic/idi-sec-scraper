@@ -3,11 +3,12 @@
 # Standard library imports
 import threading
 
-# Third party imports
 import pandas as pd
 
+# Third party imports
+from idi_ftm2j_shared.logs import get_logger
+
 # Application imports
-from idi_sec_scraper.common.logs import get_logger
 from idi_sec_scraper.processor.paths import manifest_s3_path
 from idi_sec_scraper.processor.types import ScrapedFiling
 
