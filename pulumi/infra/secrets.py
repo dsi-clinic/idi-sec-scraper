@@ -18,6 +18,7 @@ sec_user_agent_secret = aws.secretsmanager.Secret(
     "idi-secret-sec-user-agent",
     name=f"{config.name_prefix}-sec-user-agent",
     description="SEC EDGAR User-Agent header value (Name email@example.com)",
+    recovery_window_in_days=0,
     tags=config.tags(),
 )
 

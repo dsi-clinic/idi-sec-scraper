@@ -4,7 +4,7 @@ Imports all resource modules (creation order matters) and exports stack outputs.
 """
 
 # Import order matters: config first, then resources by dependency
-from infra import ecr, ecs, github_oidc, iam, networking, scheduling, secrets
+from infra import ecr, ecs, github_oidc, iam, logs, networking, scheduling, secrets
 
 import pulumi
 
@@ -28,11 +28,15 @@ pulumi.export("task_role_name", iam.task_role.name)
 pulumi.export("ecr_repo_url", ecr.ecr_repo.repository_url)
 pulumi.export("ecr_scraper_image", ecr.scraper_image)
 
+# Logs
+pulumi.export("log_group_arn", logs.log_group.arn)
+pulumi.export("log_group_name", logs.log_group.name)
+pulumi.export("log_group_retention_days", logs.log_group.retention_in_days)
+
 # ECS
 pulumi.export("ecs_cluster_arn", ecs.cluster.arn)
 pulumi.export("ecs_cluster_name", ecs.cluster.name)
 pulumi.export("task_definition_arn", ecs.task_definition.arn)
-pulumi.export("log_group_name", ecs.log_group.name)
 
 # Secrets
 pulumi.export("sec_user_agent_secret_arn", secrets.sec_user_agent_secret.arn)
@@ -45,7 +49,6 @@ pulumi.export("github_deploy_role_arn", github_oidc.deploy_role.arn)
 # Scheduling
 pulumi.export("schedule_name", scheduling.schedule.name)
 pulumi.export("schedule_arn", scheduling.schedule.arn)
-pulumi.export("dlq_url", scheduling.dlq.url)
-pulumi.export("dlq_arn", scheduling.dlq.arn)
+pulumi.export("shared_dlq_arn", scheduling.shared_dlq.arn)
 pulumi.export("scheduler_role_arn", scheduling.scheduler_role.arn)
 pulumi.export("scheduler_role_name", scheduling.scheduler_role.name)

@@ -7,8 +7,6 @@ on:
     branches:
       - main
       - dev
-      - release
-      - 'release/**'
     paths-ignore:
       - '**.md'
       - 'docs/**'
@@ -113,6 +111,7 @@ jobs:
         working-directory: ${{ env.PROJECT_DIR }}
     env:
       PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+      SHARED_DLQ_NAME: ${{ secrets.SHARED_DLQ_NAME }}
     steps:
       - uses: actions/checkout@v4
 
@@ -132,21 +131,13 @@ jobs:
           role-session-name: idi-github-ci
           aws-region: ${{ secrets.AWS_REGION || 'us-east-2' }}
 
-      - name: Set Pulumi stack
-        id: stack
-        run: |
-          if [ "${{ github.base_ref }}" = "main" ]; then
-            echo "name=prod" >> $GITHUB_OUTPUT
-          else
-            echo "name=dev" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Pulumi preview (${{ steps.stack.outputs.name }} stack)
+      - name: Pulumi preview (dev stack)
         run: |
           cd pulumi
           pulumi login s3://${{ secrets.PULUMI_STATE_BUCKET }}
-          pulumi stack select ${{ steps.stack.outputs.name }} 2>/dev/null || pulumi stack init ${{ steps.stack.outputs.name }}
+          pulumi stack select dev 2>/dev/null || pulumi stack init dev
           pulumi config set aws:region ${{ secrets.AWS_REGION || 'us-east-2' }}
           pulumi config set idi:bucket_name ${{ secrets.BUCKET_NAME }}
           pulumi config set --secret idi:sec_user_agent "${{ secrets.SEC_USER_AGENT }}"
+          [ -n "$SHARED_DLQ_NAME" ] && pulumi config set idi:shared_dlq_name "$SHARED_DLQ_NAME"
           uv run pulumi preview --non-interactive

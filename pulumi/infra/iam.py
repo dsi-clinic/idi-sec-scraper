@@ -13,7 +13,7 @@ import pulumi_aws as aws
 
 import pulumi
 
-from . import config, ecr, secrets
+from . import config, ecr, logs, secrets
 
 # -----------------------------------------------------------------------------
 # Task Execution Role (ECS agent — pulls image, writes logs, reads secrets)
@@ -67,16 +67,10 @@ task_execution_ecr_policy = aws.iam.RolePolicy(
     ),
 )
 
-# Inline: write logs to our specific log group only
-_log_group_name = f"/ecs/{config.name_prefix}"
-_log_group_arn = pulumi.Output.from_input(config.caller.account_id).apply(
-    lambda aid: f"arn:aws:logs:{config.aws_region}:{aid}:log-group:{_log_group_name}"
-)
-
 task_execution_logs_policy = aws.iam.RolePolicy(
     "idi-policy-ecs-execution-logs",
     role=task_execution_role.id,
-    policy=_log_group_arn.apply(
+    policy=logs.log_group.arn.apply(
         lambda arn: json.dumps(
             {
                 "Version": "2012-10-17",
@@ -138,38 +132,42 @@ task_role = aws.iam.Role(
     tags=config.tags(),
 )
 
-# S3 policy — all scraped filings in one bucket
-# Bucket is created externally; ARN constructed from config name
-_bucket_arn = f"arn:aws:s3:::{config.bucket_name}"
+# -----------------------------------------------------------------------------
+# S3 bucket (looked up by name — owned by a separate project/stack)
+# Required config: deploy must set `idi:bucket_name` per stack.
+# -----------------------------------------------------------------------------
+bucket = aws.s3.get_bucket_output(bucket=config.bucket_name)
 
 task_s3_policy = aws.iam.RolePolicy(
     "idi-policy-ecs-task-s3",
     role=task_role.id,
-    policy=json.dumps(
-        {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Action": ["s3:ListBucket"],
-                    "Resource": _bucket_arn,
-                },
-                {
-                    "Effect": "Allow",
-                    "Action": [
-                        "s3:GetObject",
-                        "s3:PutObject",
-                        "s3:DeleteObject",
-                        "s3:AbortMultipartUpload",
-                        "s3:CreateMultipartUpload",
-                        "s3:UploadPart",
-                        "s3:CompleteMultipartUpload",
-                        "s3:ListMultipartUploadParts",
-                    ],
-                    "Resource": f"{_bucket_arn}/*",
-                },
-            ],
-        }
+    policy=bucket.arn.apply(
+        lambda arn: json.dumps(
+            {
+                "Version": "2012-10-17",
+                "Statement": [
+                    {
+                        "Effect": "Allow",
+                        "Action": ["s3:ListBucket"],
+                        "Resource": arn,
+                    },
+                    {
+                        "Effect": "Allow",
+                        "Action": [
+                            "s3:GetObject",
+                            "s3:PutObject",
+                            "s3:DeleteObject",
+                            "s3:AbortMultipartUpload",
+                            "s3:CreateMultipartUpload",
+                            "s3:UploadPart",
+                            "s3:CompleteMultipartUpload",
+                            "s3:ListMultipartUploadParts",
+                        ],
+                        "Resource": f"{arn}/*",
+                    },
+                ],
+            }
+        )
     ),
 )
 
