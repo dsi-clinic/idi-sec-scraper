@@ -26,21 +26,14 @@ cluster = aws.ecs.Cluster(
 # -----------------------------------------------------------------------------
 # Task Definition
 # -----------------------------------------------------------------------------
+CONTAINER_NAME = "sec-scraper"
+
 cpu = config.config.get("cpu") or "1024"
 memory = config.config.get("memory") or "4096"
 rate_limit = config.config.get("rate_limit") or "0.15"
 max_workers = config.config.get("max_workers") or "15"
 
 failure_file = f"s3://{config.bucket_name}/sec/failures.json"
-
-scraper_cmd = (
-    f"sec-scraper"
-    f" --bucket {config.bucket_name}"
-    f" --failure-file {failure_file}"
-    f" --rate-limit {rate_limit}"
-    f" --max-workers {max_workers}"
-    f" daily"
-)
 
 container_definitions = pulumi.Output.all(
     image=ecr.scraper_image,
@@ -51,11 +44,10 @@ container_definitions = pulumi.Output.all(
     lambda args: json.dumps(
         [
             {
-                "name": "sec-scraper",
+                "name": CONTAINER_NAME,
                 "image": args["image"],
                 "essential": True,
-                "entryPoint": ["sh", "-c"],
-                "command": [scraper_cmd],
+                "command": ["--help"],
                 "environment": [
                     {"name": "AWS_REGION", "value": args["region"]},
                     {"name": "CLOUDWATCH_LOGS_ENABLED", "value": "false"},

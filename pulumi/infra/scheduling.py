@@ -86,6 +86,25 @@ scheduler_policy = aws.iam.RolePolicy(
 schedule_expression = config.config.get("cron_sec_scraper") or "cron(0 3 * * ? *)"
 schedule_enabled = (config.config.get("schedule_enabled") or "false") == "true"
 
+_CONTAINER_NAME = ecs.CONTAINER_NAME
+
+
+def _container_override_input() -> str:
+    """Build the EventBridge Scheduler ``input`` JSON for an ECS containerOverride."""
+    command = [
+        "--bucket",
+        config.bucket_name,
+        "--failure-file",
+        ecs.failure_file,
+        "--rate-limit",
+        ecs.rate_limit,
+        "--max-workers",
+        ecs.max_workers,
+        "daily",
+    ]
+    return json.dumps({"containerOverrides": [{"name": _CONTAINER_NAME, "command": command}]})
+
+
 schedule = aws.scheduler.Schedule(
     "idi-schedule-sec-scraper",
     name=f"{config.name_prefix}-schedule",
@@ -98,6 +117,7 @@ schedule = aws.scheduler.Schedule(
     target=aws.scheduler.ScheduleTargetArgs(
         arn=ecs.cluster.arn,
         role_arn=scheduler_role.arn,
+        input=_container_override_input(),
         ecs_parameters=aws.scheduler.ScheduleTargetEcsParametersArgs(
             task_definition_arn=ecs.task_definition.arn,
             launch_type="FARGATE",
