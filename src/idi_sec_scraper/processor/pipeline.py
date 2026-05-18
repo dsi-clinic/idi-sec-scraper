@@ -411,11 +411,19 @@ class SECScraperPipeline(Pipeline, ABC):
 
             if "error" in doc_response:
                 failure_type = self._failure_classifier.classify_from_response(doc_response)
+                status_code = doc_response.get("status_code", "unknown")
+                error = doc_response.get("error", "")
                 if failure_type == FailureType.RATE_LIMIT:
-                    self.logger.warning("Rate limited fetching document %s", doc.url)
+                    self.logger.warning(
+                        "Rate limited fetching document %s (status=%s)", doc.url, status_code
+                    )
                 else:
-                    self.logger.error("Failed to fetch document %s", doc.url)
-                    self.failure_registry.add(failure_key, FailureType.API_ERROR)
+                    self.logger.error(
+                        "Failed to fetch document %s (status=%s, error=%s)",
+                        doc.url,
+                        status_code,
+                        error,
+                    )
                 self.stats.increment("failed_documents")
                 failed_doc_count += 1
                 continue
