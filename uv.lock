@@ -542,8 +542,8 @@ wheels = [
 
 [[package]]
 name = "idi-ftm2j-shared"
-version = "0.1.0"
-source = { git = "https://github.com/dsi-clinic/idi-ftm2j-shared.git?rev=issue-2-shared-code#b573fc9f45c3339129b2147979f179e7940ef5f1" }
+version = "0.1.1a1"
+source = { git = "https://github.com/dsi-clinic/idi-ftm2j-shared.git?rev=v0.1.1a1#c14c0c4f56701dc9b0070656517cf6d019ddb01d" }
 dependencies = [
     { name = "requests" },
     { name = "smart-open", extra = ["s3"] },
@@ -588,7 +588,7 @@ pulumi = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12.0" },
     { name = "boto3", specifier = ">=1.42.70" },
-    { name = "idi-ftm2j-shared", git = "https://github.com/dsi-clinic/idi-ftm2j-shared.git?rev=issue-2-shared-code" },
+    { name = "idi-ftm2j-shared", git = "https://github.com/dsi-clinic/idi-ftm2j-shared.git?rev=v0.1.1a1" },
     { name = "pandas", specifier = ">=3.0.2" },
     { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.10.0" },
     { name = "pyarrow", specifier = ">=23.0.1" },
