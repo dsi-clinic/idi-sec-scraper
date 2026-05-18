@@ -37,7 +37,10 @@ def _get_s3_client() -> boto3.client:
     return _s3_client
 
 
-def _s3_tp(extra: dict | None = None) -> dict:
+def _s3_tp(path: str, extra: dict | None = None) -> dict:
+    """Return transport_params for smart_open; injects shared S3 client only for s3:// paths."""
+    if not path.startswith("s3://"):
+        return {}
     params = dict(extra or {})
     params["client"] = _get_s3_client()
     return params
@@ -75,7 +78,7 @@ def load_json(file_path: str, return_type: str = "dict") -> dict | list:
         json.JSONDecodeError: If the file exists but contains invalid JSON.
     """
     try:
-        with smart_open.open(file_path, transport_params=_s3_tp()) as f:
+        with smart_open.open(file_path, transport_params=_s3_tp(file_path)) as f:
             return json.load(f)
 
     except (FileNotFoundError, OSError):
@@ -100,10 +103,10 @@ def save_json(file_path: str, data: dict | list, mode: str = "w") -> None:
         mode: File open mode ("w" to overwrite, "a" to append). S3 paths always overwrite.
     """
     try:
-        if "s3://" in file_path:
+        if file_path.startswith("s3://"):
             with tempfile.NamedTemporaryFile() as tmp:
                 with smart_open.open(
-                    file_path, "w", transport_params=_s3_tp({"writebuffer": tmp})
+                    file_path, "w", transport_params=_s3_tp(file_path, {"writebuffer": tmp})
                 ) as fout:
                     json.dump(data, fout, indent=2)
         else:
@@ -156,7 +159,7 @@ def load_content(file_path: str) -> str:
         botocore.exceptions.ClientError: If an S3 error other than ``NoSuchKey`` occurs.
     """
     try:
-        with smart_open.open(file_path, transport_params=_s3_tp()) as f:
+        with smart_open.open(file_path, transport_params=_s3_tp(file_path)) as f:
             return f.read()
     except (FileNotFoundError, OSError):
         return ""
@@ -174,10 +177,10 @@ def save_content(file_path: str, content: str) -> None:
         content: Text content to write.
     """
     try:
-        if "s3://" in file_path:
+        if file_path.startswith("s3://"):
             with tempfile.NamedTemporaryFile() as tmp:
                 with smart_open.open(
-                    file_path, "w", transport_params=_s3_tp({"writebuffer": tmp})
+                    file_path, "w", transport_params=_s3_tp(file_path, {"writebuffer": tmp})
                 ) as fout:
                     fout.write(content)
         else:
@@ -221,7 +224,12 @@ def open_zip(file_path: str, headers: dict | None = None) -> Iterator[zipfile.Zi
         zipfile.BadZipFile: If the file is not a valid ZIP archive.
         OSError: If the file cannot be opened or read.
     """
-    tp = {"headers": headers} if headers else {}
+    if file_path.startswith("s3://"):
+        tp = _s3_tp(file_path)
+    elif headers:
+        tp = {"headers": headers}
+    else:
+        tp = {}
     with smart_open.open(file_path, "rb", transport_params=tp) as f:
         with zipfile.ZipFile(f) as zf:
             yield zf
