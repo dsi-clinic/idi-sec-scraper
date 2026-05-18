@@ -249,7 +249,9 @@ class SECScraperPipeline(Pipeline, ABC):
         self.logger.info("    Total:    %d", self.stats.total_filings)
         self.logger.info("    Scraped:  %d", self.stats.scraped_filings)
         self.logger.info("    Skipped (cached):        %d", self.stats.skipped_cached_filings)
-        self.logger.info("    Skipped (known failure): %d", self.stats.skipped_known_failure_filings)
+        self.logger.info(
+            "    Skipped (known failure): %d", self.stats.skipped_known_failure_filings
+        )
         self.logger.info("    Failed:   %d", self.stats.failed_filings)
         self.logger.info("  Documents")
         self.logger.info("    Total:    %d", self.stats.total_documents)
