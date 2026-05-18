@@ -197,7 +197,7 @@ class SECScraperPipeline(Pipeline, ABC):
                         self.logger.warning(
                             "Skipping known failure: %s / %s", filing.cik, filing.accession_number
                         )
-                        self.stats.increment("skipped_filings")
+                        self.stats.increment("skipped_known_failure_filings")
                         continue
                     return executor.submit(self._scrape_filing, filing)
 
@@ -216,7 +216,7 @@ class SECScraperPipeline(Pipeline, ABC):
                     if result is None:
                         self.stats.increment("failed_filings")
                     elif result[1]:
-                        self.stats.increment("skipped_filings")
+                        self.stats.increment("skipped_cached_filings")
                     else:
                         self.manifest_writer.add(result[0])
                         self.stats.increment("scraped_filings")
@@ -248,7 +248,8 @@ class SECScraperPipeline(Pipeline, ABC):
         self.logger.info("  Filings")
         self.logger.info("    Total:    %d", self.stats.total_filings)
         self.logger.info("    Scraped:  %d", self.stats.scraped_filings)
-        self.logger.info("    Skipped:  %d", self.stats.skipped_filings)
+        self.logger.info("    Skipped (cached):        %d", self.stats.skipped_cached_filings)
+        self.logger.info("    Skipped (known failure): %d", self.stats.skipped_known_failure_filings)
         self.logger.info("    Failed:   %d", self.stats.failed_filings)
         self.logger.info("  Documents")
         self.logger.info("    Total:    %d", self.stats.total_documents)

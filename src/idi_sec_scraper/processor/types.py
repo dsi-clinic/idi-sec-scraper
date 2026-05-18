@@ -115,7 +115,8 @@ class PipelineStats:
 
     total_filings: int = 0
     scraped_filings: int = 0
-    skipped_filings: int = 0
+    skipped_cached_filings: int = 0
+    skipped_known_failure_filings: int = 0
     failed_filings: int = 0
     total_documents: int = 0
     scraped_documents: int = 0

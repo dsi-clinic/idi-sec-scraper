@@ -970,7 +970,7 @@ class TestProcess:
         pipeline.process([_FILING])
 
         pipeline.sec_client.query_endpoint.assert_not_called()
-        assert pipeline.stats.skipped_filings == 1
+        assert pipeline.stats.skipped_known_failure_filings == 1
         assert pipeline.stats.failed_filings == 0
 
     def test_known_failure_not_double_counted_as_failed(self, mocker):
@@ -988,7 +988,7 @@ class TestProcess:
 
         pipeline.process([_FILING])
 
-        assert pipeline.stats.skipped_filings == 1
+        assert pipeline.stats.skipped_known_failure_filings == 1
         assert pipeline.stats.failed_filings == 0
         assert pipeline.stats.total_filings == 1
 
@@ -1038,7 +1038,8 @@ class TestProcess:
 
         pipeline.manifest_writer.add.assert_not_called()
         assert pipeline.stats.failed_filings == 1
-        assert pipeline.stats.skipped_filings == 0
+        assert pipeline.stats.skipped_cached_filings == 0
+        assert pipeline.stats.skipped_known_failure_filings == 0
         assert pipeline.stats.form_type_filings_total["8-K"] == 1
 
     def test_fully_cached_filing_counted_as_skipped_not_scraped(self, mocker):
@@ -1076,7 +1077,7 @@ class TestProcess:
         pipeline.process([_FILING])
 
         pipeline.manifest_writer.add.assert_not_called()
-        assert pipeline.stats.skipped_filings == 1
+        assert pipeline.stats.skipped_cached_filings == 1
         assert pipeline.stats.scraped_filings == 0
         assert pipeline.stats.failed_filings == 0
         pipeline.sec_client.query_endpoint.assert_not_called()
@@ -1110,4 +1111,5 @@ class TestProcess:
 
         assert pipeline.manifest_writer.add.call_count == 1
         assert pipeline.stats.scraped_filings == 1
-        assert pipeline.stats.skipped_filings == 0
+        assert pipeline.stats.skipped_cached_filings == 0
+        assert pipeline.stats.skipped_known_failure_filings == 0
