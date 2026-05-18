@@ -131,11 +131,20 @@ jobs:
           role-session-name: idi-github-ci
           aws-region: ${{ secrets.AWS_REGION || 'us-east-2' }}
 
-      - name: Pulumi preview (dev stack)
+      - name: Set Pulumi stack
+        id: stack
+        run: |
+          if [ "${{ github.base_ref }}" = "main" ]; then
+            echo "name=prod" >> $GITHUB_OUTPUT
+          else
+            echo "name=dev" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Pulumi preview (${{ steps.stack.outputs.name }} stack)
         run: |
           cd pulumi
           pulumi login s3://${{ secrets.PULUMI_STATE_BUCKET }}
-          pulumi stack select dev 2>/dev/null || pulumi stack init dev
+          pulumi stack select ${{ steps.stack.outputs.name }} 2>/dev/null || pulumi stack init ${{ steps.stack.outputs.name }}
           pulumi config set aws:region ${{ secrets.AWS_REGION || 'us-east-2' }}
           pulumi config set idi:bucket_name ${{ secrets.BUCKET_NAME }}
           pulumi config set --secret idi:sec_user_agent "${{ secrets.SEC_USER_AGENT }}"
