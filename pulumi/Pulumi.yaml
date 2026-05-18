@@ -1,0 +1,54 @@
+name: idi
+runtime: python
+description: AWS ECS infrastructure for IDI SEC Scraper Pipeline
+
+config:
+  aws:region:
+    description: AWS region to deploy to
+    value: us-east-2
+
+  idi:app_name:
+    description: Name of the application
+    default: "sec-scraper"
+
+  idi:sec_user_agent:
+    description: "SEC EDGAR User-Agent header value (format: Name email@example.com)"
+    secret: true
+
+  idi:cron_sec_scraper:
+    description: EventBridge cron schedule for the SEC scraper (daily run)
+    default: "cron(0 3 * * ? *)"
+
+  idi:cpu:
+    description: Fargate task CPU units (256, 512, 1024, 2048, 4096)
+    default: "1024"
+
+  idi:memory:
+    description: Fargate task memory in MiB (must be valid for chosen CPU)
+    default: "4096"
+
+  idi:rate_limit:
+    description: SEC API rate limit in seconds between requests
+    default: "0.15"
+
+  idi:max_workers:
+    description: Number of concurrent filing download threads
+    default: "15"
+
+  idi:schedule_enabled:
+    description: Whether the EventBridge schedule is enabled
+    default: "false"
+
+  idi:bucket_name:
+    description: S3 bucket name for scraped filings (created externally)
+
+  idi:log_retention_days:
+    description: CloudWatch log group retention in days
+    default: "30"
+
+  idi:shared_dlq_name:
+    description: Name of the shared SQS DLQ from idi-ftm2j-shared
+
+  idi:ecr_image_count:
+    description: ECR image retention count
+    default: "5"

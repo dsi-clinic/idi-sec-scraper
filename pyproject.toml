@@ -26,6 +26,9 @@ dependencies = [
     "watchtower>=3.4.0",
 ]
 
+[project.scripts]
+sec-scraper = "idi_sec_scraper.processor.orchestrator:main"
+
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
