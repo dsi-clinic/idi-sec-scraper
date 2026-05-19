@@ -493,4 +493,6 @@ class DailySECScraperPipeline(SECScraperPipeline):
 
     def load_input(self) -> Iterable[DiscoveredFiling]:
         """Discover filings from daily crawler indexes."""
-        return self.discovery.discover(self.config.start_date, self.config.end_date)
+        filings = self.discovery.discover(self.config.start_date, self.config.end_date)
+        self.logger.info("Discovered %d filings to scrape", len(filings))
+        return filings
