@@ -1,6 +1,7 @@
 """Provides storage utilities for use across the application."""
 
 # Standard library imports
+import gzip
 import json
 import os
 import pathlib
@@ -147,7 +148,8 @@ def key_exists(file_path: str) -> bool:
 def load_content(file_path: str) -> str:
     """Load text content from a local path or S3 URL.
 
-    Missing files return an empty string instead of raising.
+    Missing files return an empty string instead of raising. S3 objects with
+    ``ContentEncoding: gzip`` are transparently decompressed.
 
     Args:
         file_path: Local filesystem path or ``s3://`` URL of the text file.
@@ -158,36 +160,53 @@ def load_content(file_path: str) -> str:
     Raises:
         botocore.exceptions.ClientError: If an S3 error other than ``NoSuchKey`` occurs.
     """
+    if file_path.startswith("s3://"):
+        without_scheme = file_path[5:]
+        bucket, _, key = without_scheme.partition("/")
+        try:
+            response = _get_s3_client().get_object(Bucket=bucket, Key=key)
+            body = response["Body"].read()
+            if response.get("ContentEncoding") == "gzip":
+                body = gzip.decompress(body)
+            return body.decode()
+        except (FileNotFoundError, OSError):
+            return ""
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") == "NoSuchKey":
+                return ""
+            raise
     try:
-        with smart_open.open(file_path, transport_params=_s3_tp(file_path)) as f:
+        with smart_open.open(file_path) as f:
             return f.read()
     except (FileNotFoundError, OSError):
         return ""
-    except ClientError as e:
-        if e.response.get("Error", {}).get("Code") == "NoSuchKey":
-            return ""
-        raise
 
 
 def save_content(file_path: str, content: str) -> None:
     """Save text content to a local path or S3 URL.
 
+    S3 uploads are gzip-compressed with ``ContentEncoding: gzip`` set so
+    clients can transparently decompress. Local writes are uncompressed.
+
     Args:
         file_path: Local filesystem path or ``s3://`` URL to write to.
         content: Text content to write.
     """
-    try:
-        if file_path.startswith("s3://"):
-            with tempfile.NamedTemporaryFile() as tmp:
-                with smart_open.open(
-                    file_path, "w", transport_params=_s3_tp(file_path, {"writebuffer": tmp})
-                ) as fout:
-                    fout.write(content)
-        else:
+    if file_path.startswith("s3://"):
+        without_scheme = file_path[5:]
+        bucket, _, key = without_scheme.partition("/")
+        _get_s3_client().put_object(
+            Bucket=bucket,
+            Key=key,
+            Body=gzip.compress(content.encode()),
+            ContentEncoding="gzip",
+        )
+    else:
+        try:
             with smart_open.open(file_path, "w") as fout:
                 fout.write(content)
-    except ValueError as e:
-        raise ValueError(f"Failed to save content to {file_path!r}: {e}") from e
+        except ValueError as e:
+            raise ValueError(f"Failed to save content to {file_path!r}: {e}") from e
 
 
 def stream_to_s3(fileobj: object, s3_url: str) -> None:
