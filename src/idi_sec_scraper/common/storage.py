@@ -22,8 +22,8 @@ _s3_client = None
 _s3_client_lock = threading.Lock()
 
 # Files larger than this after compression use multipart upload; below it use put_object.
-# 5MB is S3's minimum part size, so single-part is the only valid option below this threshold.
-_MULTIPART_THRESHOLD = 5 * 1024 * 1024
+# 50MB is S3's minimum part size, so single-part is the only valid option below this threshold.
+_MULTIPART_THRESHOLD = 50 * 1024 * 1024
 
 
 def _get_s3_client() -> boto3.client:
@@ -87,8 +87,8 @@ def _empty_for_return_type(return_type: str) -> dict | list:
 def load_json(file_path: str, return_type: str = "dict") -> dict | list:
     """Load a JSON file from a local path or S3 URL.
 
-    Missing files return an empty container instead of raising. S3 objects
-    with ``ContentEncoding: gzip`` are transparently decompressed.
+    Missing files return an empty container instead of raising. Compressed
+    files are transparently decompressed.
 
     Args:
         file_path: Local filesystem path or ``s3://bucket/key`` URL.
@@ -102,38 +102,19 @@ def load_json(file_path: str, return_type: str = "dict") -> dict | list:
         botocore.exceptions.ClientError: If an S3 error other than ``NoSuchKey`` occurs.
         json.JSONDecodeError: If the file exists but contains invalid JSON.
     """
-    if _is_s3(file_path):
-        bucket, key = _parse_s3_url(file_path)
-        body = _s3_get_bytes(bucket, key)
-        return json.loads(body) if body is not None else _empty_for_return_type(return_type)
-    try:
-        return json.loads(pathlib.Path(file_path).read_text())
-    except FileNotFoundError:
-        return _empty_for_return_type(return_type)
+    body = load_content(file_path)
+    return json.loads(body) if body else _empty_for_return_type(return_type)
 
 
 def save_json(file_path: str, data: dict | list, compress: bool = False) -> None:
     """Save data as JSON to a local path or S3 URL.
-
-    S3 writes use a single ``put_object`` call (1 PUT request). Local writes
-    overwrite the file.
 
     Args:
         file_path: Local filesystem path or ``s3://bucket/key`` URL.
         data: The JSON-serialisable dict or list to write.
         compress: If True, gzip-compress before uploading to S3.
     """
-    encoded = json.dumps(data, indent=2).encode()
-    if _is_s3(file_path):
-        bucket, key = _parse_s3_url(file_path)
-        if compress:
-            _get_s3_client().put_object(
-                Bucket=bucket, Key=key, Body=gzip.compress(encoded), ContentEncoding="gzip"
-            )
-        else:
-            _get_s3_client().put_object(Bucket=bucket, Key=key, Body=encoded)
-    else:
-        pathlib.Path(file_path).write_bytes(encoded)
+    save_content(file_path, json.dumps(data, indent=2).encode(), compress=compress)
 
 
 def key_exists(file_path: str) -> bool:
