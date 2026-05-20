@@ -7,6 +7,10 @@ form_types:
           - field: type
             operator: regex
             value: '^EX-21'
+      - all_of:
+          - field: type
+            operator: regex
+            value: '^10-K'
 
   20-F:
     match: '20-?F'
@@ -16,6 +20,15 @@ form_types:
           - field: type
             operator: regex
             value: '^EX-8'
+
+  10-Q:
+    match: '10-?Q'
+    cutoff_date: '2016-01-01'
+    documents:
+      - all_of:
+          - field: type
+            operator: regex
+            value: '^10-Q'
 
   8-K:
     match: '8-K'

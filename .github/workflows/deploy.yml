@@ -159,6 +159,7 @@ jobs:
     name: Deploy Pulumi
     runs-on: ubuntu-latest
     needs: [version, docker]
+    environment: ${{ needs.version.outputs.deploy_env }}
     permissions:
       id-token: write
       contents: read
@@ -178,6 +179,7 @@ jobs:
       MAX_WORKERS: ${{ secrets.MAX_WORKERS }}
       SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
       CRON: ${{ secrets.CRON }}
+      SCHEDULE_ENABLED: ${{ secrets.SCHEDULE_ENABLED }}
       SHARED_DLQ_NAME: ${{ secrets.SHARED_DLQ_NAME }}
     steps:
       - uses: actions/checkout@v4
@@ -213,6 +215,7 @@ jobs:
           [ -n "$MAX_WORKERS" ] && pulumi config set idi:max_workers "$MAX_WORKERS"
           [ -n "$SEC_USER_AGENT" ] && pulumi config set --secret idi:sec_user_agent "$SEC_USER_AGENT"
           [ -n "$CRON" ] && pulumi config set idi:cron_sec_scraper "$CRON"
+          [ -n "$SCHEDULE_ENABLED" ] && pulumi config set idi:schedule_enabled "$SCHEDULE_ENABLED"
           [ -n "$SHARED_DLQ_NAME" ] && pulumi config set idi:shared_dlq_name "$SHARED_DLQ_NAME"
 
       - name: Pulumi deploy
@@ -224,6 +227,7 @@ jobs:
     name: Sync GHCR to ECR
     runs-on: ubuntu-latest
     needs: [version, docker, deploy-pulumi]
+    environment: ${{ needs.version.outputs.deploy_env }}
     permissions:
       id-token: write
       contents: read

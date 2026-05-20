@@ -115,7 +115,8 @@ class PipelineStats:
 
     total_filings: int = 0
     scraped_filings: int = 0
-    skipped_filings: int = 0
+    skipped_cached_filings: int = 0
+    skipped_known_failure_filings: int = 0
     failed_filings: int = 0
     total_documents: int = 0
     scraped_documents: int = 0
@@ -123,6 +124,8 @@ class PipelineStats:
     failed_documents: int = 0
     form_type_filings_total: dict[str, int] = field(default_factory=dict)
     form_type_documents_total: dict[str, int] = field(default_factory=dict)
+    discovery_elapsed: datetime.timedelta = field(default_factory=lambda: datetime.timedelta(0))
+    scraping_elapsed: datetime.timedelta = field(default_factory=lambda: datetime.timedelta(0))
 
     def __post_init__(self) -> None:
         """Initialize the threading lock."""
@@ -152,7 +155,8 @@ class PipelineConfig:
     bucket: str
     document_filters_path: str
     failure_file: str = ""
-    max_workers: int = 8
+    max_workers: int = 15
+    manifest_flush_every: int = 1000
 
 
 @dataclass

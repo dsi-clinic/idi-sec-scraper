@@ -405,7 +405,7 @@ uv run --group pulumi pulumi up
 | `idi:cron_sec_scraper` | `cron(0 3 * * ? *)` | EventBridge schedule expression (3 AM UTC daily) |
 | `idi:schedule_enabled` | `false` | Enable the EventBridge schedule |
 | `idi:cpu` | `1024` | Fargate task CPU units |
-| `idi:memory` | `4096` | Fargate task memory (MiB) |
+| `idi:memory` | `8192` | Fargate task memory (MiB) |
 | `idi:rate_limit` | `0.15` | Seconds between SEC API requests |
 | `idi:max_workers` | `15` | Concurrent filing download threads |
 

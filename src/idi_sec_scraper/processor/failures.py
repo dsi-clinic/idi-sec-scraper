@@ -3,8 +3,8 @@
 # Standard library imports
 from enum import StrEnum
 
-# Application imports
-from idi_sec_scraper.common.failures import FailureClassifier
+# Third party imports
+from idi_ftm2j_shared.failures import FailureClassifier
 
 
 class FailureType(StrEnum):

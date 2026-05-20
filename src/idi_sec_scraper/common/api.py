@@ -9,13 +9,12 @@ from abc import ABC, abstractmethod
 from functools import cached_property
 from typing import Any, Literal
 
-# Third party imports
 import requests
+
+# Third party imports
+from idi_ftm2j_shared.logs import get_logger
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
-
-# Application imports
-from .logs import get_logger
 
 
 class ApiClient(ABC):
@@ -220,10 +219,10 @@ class ApiClient(ABC):
 class SecClient(ApiClient):
     """API client for the SEC EDGAR archive, with built-in rate limiting."""
 
-    SEC_HEADERS = {"User-Agent": "Alice Duan aliceduan@uchicago.edu"}
+    SEC_HEADERS = {"User-Agent": "DSI Core Facility dsicorefacility_project8@uchicago.edu"}
     SEC_URL = "https://www.sec.gov/Archives/edgar/data"
 
-    def __init__(self, rate_limit: float = 0.2) -> None:
+    def __init__(self, rate_limit: float | None = 0.15) -> None:
         """Initializes the SEC API.
 
         Args:

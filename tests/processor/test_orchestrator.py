@@ -70,7 +70,7 @@ class TestSharedArgs:
     def test_max_workers_default(self, mocker):
         mock_hist, _ = _run(mocker, ["--bucket", "b", "historical"])
         config = mock_hist.call_args.args[0]
-        assert config.max_workers == 8
+        assert config.max_workers == 15
 
     def test_max_workers_override(self, mocker):
         mock_hist, _ = _run(mocker, ["--bucket", "b", "--max-workers", "16", "historical"])
@@ -114,12 +114,20 @@ class TestDailyMode:
     """Tests for the daily subcommand."""
 
     def test_launches_daily_pipeline(self, mocker):
-        mock_hist, mock_daily = _run(
-            mocker,
-            ["--bucket", "b", "daily", "--start-date", "2026-04-01", "--end-date", "2026-04-03"],
-        )
+        mock_hist, mock_daily = _run(mocker, ["--bucket", "b", "daily"])
         assert mock_daily.return_value.run.called
         assert not mock_hist.return_value.run.called
+
+    def test_dates_default_to_yesterday(self, mocker):
+        fake_today = datetime.date(2026, 4, 2)
+        mock_dt = mocker.patch("idi_sec_scraper.processor.orchestrator.datetime")
+        mock_dt.date.today.return_value = fake_today
+        mock_dt.date.fromisoformat = datetime.date.fromisoformat
+        mock_dt.timedelta = datetime.timedelta
+        _, mock_daily = _run(mocker, ["--bucket", "b", "daily"])
+        config = mock_daily.call_args.args[0]
+        assert config.start_date == datetime.date(2026, 4, 1)
+        assert config.end_date == datetime.date(2026, 4, 1)
 
     def test_start_and_end_date_parsed(self, mocker):
         _, mock_daily = _run(
@@ -130,14 +138,14 @@ class TestDailyMode:
         assert config.start_date == datetime.date(2026, 4, 1)
         assert config.end_date == datetime.date(2026, 4, 3)
 
-    def test_start_date_required(self, mocker):
+    def test_start_date_without_end_date_errors(self, mocker):
         mocker.patch(
             "sys.argv", ["sec-scraper", "--bucket", "b", "daily", "--end-date", "2026-04-01"]
         )
         with pytest.raises(SystemExit):
             main()
 
-    def test_end_date_required(self, mocker):
+    def test_end_date_without_start_date_errors(self, mocker):
         mocker.patch(
             "sys.argv", ["sec-scraper", "--bucket", "b", "daily", "--start-date", "2026-04-01"]
         )

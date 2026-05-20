@@ -541,21 +541,32 @@ wheels = [
 ]
 
 [[package]]
+name = "idi-ftm2j-shared"
+version = "0.1.3"
+source = { git = "https://github.com/dsi-clinic/idi-ftm2j-shared.git?rev=v0.1.3#450f182474027ae2e2f83317347197a04b712e0d" }
+dependencies = [
+    { name = "requests" },
+    { name = "smart-open", extra = ["s3"] },
+    { name = "tqdm" },
+    { name = "watchtower" },
+]
+
+[[package]]
 name = "idi-sec-scraper"
 version = "0.1.1a1"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "boto3" },
+    { name = "idi-ftm2j-shared" },
+    { name = "idna" },
     { name = "pandas" },
     { name = "pyarrow" },
     { name = "pyyaml" },
     { name = "requests" },
     { name = "s3fs" },
     { name = "smart-open" },
-    { name = "tqdm" },
     { name = "urllib3" },
-    { name = "watchtower" },
 ]
 
 [package.optional-dependencies]
@@ -578,6 +589,8 @@ pulumi = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.12.0" },
     { name = "boto3", specifier = ">=1.42.70" },
+    { name = "idi-ftm2j-shared", git = "https://github.com/dsi-clinic/idi-ftm2j-shared.git?rev=v0.1.3" },
+    { name = "idna", specifier = ">=3.15" },
     { name = "pandas", specifier = ">=3.0.2" },
     { name = "pip-audit", marker = "extra == 'dev'", specifier = ">=2.10.0" },
     { name = "pyarrow", specifier = ">=23.0.1" },
@@ -589,9 +602,7 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.0" },
     { name = "s3fs", specifier = ">=2026.3.0" },
     { name = "smart-open", specifier = ">=7.5.1" },
-    { name = "tqdm", specifier = ">=4.67.3" },
     { name = "urllib3", specifier = ">=2.6.3" },
-    { name = "watchtower", specifier = ">=3.4.0" },
 ]
 provides-extras = ["dev"]
 
@@ -604,11 +615,11 @@ pulumi = [
 
 [[package]]
 name = "idna"
-version = "3.13"
+version = "3.15"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ce/cc/762dfb036166873f0059f3b7de4565e1b5bc3d6f28a414c13da27e442f99/idna-3.13.tar.gz", hash = "sha256:585ea8fe5d69b9181ec1afba340451fba6ba764af97026f92a91d4eef164a242", size = 194210, upload-time = "2026-04-22T16:42:42.314Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/82/77/7b3966d0b9d1d31a36ddf1746926a11dface89a83409bf1483f0237aa758/idna-3.15.tar.gz", hash = "sha256:ca962446ea538f7092a95e057da437618e886f4d349216d2b1e294abfdb65fdc", size = 199245, upload-time = "2026-05-12T22:45:57.011Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/5d/13/ad7d7ca3808a898b4612b6fe93cde56b53f3034dcde235acb1f0e1df24c6/idna-3.13-py3-none-any.whl", hash = "sha256:892ea0cde124a99ce773decba204c5552b69c3c67ffd5f232eb7696135bc8bb3", size = 68629, upload-time = "2026-04-22T16:42:40.909Z" },
+    { url = "https://files.pythonhosted.org/packages/d2/23/408243171aa9aaba178d3e2559159c24c1171a641aa83b67bdd3394ead8e/idna-3.15-py3-none-any.whl", hash = "sha256:048adeaf8c2d788c40fee287673ccaa74c24ffd8dcf09ffa555a2fbb59f10ac8", size = 72340, upload-time = "2026-05-12T22:45:55.733Z" },
 ]
 
 [[package]]
@@ -1482,6 +1493,11 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/14/33/7a00ac9b4a63afb4279b99a766f6cbe56c443526dcbf5db97b219e21fde9/smart_open-7.6.0.tar.gz", hash = "sha256:44717f46b5ff276fac03b88e5d13d1c416f064f3b7b081381b0fa8889004bd7e", size = 54548, upload-time = "2026-04-13T09:48:04.347Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/de/bc/2761410d0541e975f384bc89f062d716bf119499dd097eb1af33dcd3b1c0/smart_open-7.6.0-py3-none-any.whl", hash = "sha256:2a78f454610a826aa688065b54b4a0a9b12a5599fa61d5190e9bac2df5e5f53f", size = 64591, upload-time = "2026-04-13T09:48:02.687Z" },
+]
+
+[package.optional-dependencies]
+s3 = [
+    { name = "boto3" },
 ]
 
 [[package]]

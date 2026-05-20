@@ -29,7 +29,7 @@ cluster = aws.ecs.Cluster(
 CONTAINER_NAME = "sec-scraper"
 
 cpu = config.config.get("cpu") or "1024"
-memory = config.config.get("memory") or "4096"
+memory = config.config.get("memory") or "8192"
 rate_limit = config.config.get("rate_limit") or "0.15"
 max_workers = config.config.get("max_workers") or "15"
 

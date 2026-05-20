@@ -103,6 +103,7 @@ jobs:
   pulumi-preview:
     name: Pulumi Preview
     runs-on: ubuntu-latest
+    environment: ${{ github.base_ref == 'main' && 'prod' || 'dev' }}
     permissions:
       id-token: write    # This is required for requesting JWT
       contents: read     # This is required for actions/checkout

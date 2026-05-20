@@ -7,11 +7,11 @@ import datetime
 # Application imports
 from idi_sec_scraper.processor.document_filters import FormTypeConfig
 from idi_sec_scraper.processor.failures import FailureType
+from idi_sec_scraper.processor.paths import filing_s3_prefix
 from idi_sec_scraper.processor.pipeline import (
     DailySECScraperPipeline,
     HistoricalSECScraperPipeline,
     _new_scraped_filing,
-    _s3_prefix,
     _scraped_filing_from_dict,
 )
 from idi_sec_scraper.processor.types import (
@@ -46,11 +46,12 @@ _FILING = DiscoveredFiling(
 
 
 def _make_pipeline(mocker, cls, config):
-    """Instantiate a pipeline with a mocked document filter load."""
+    """Instantiate a pipeline with a mocked document filter load and manifest writer."""
     mocker.patch(
         "idi_sec_scraper.processor.pipeline.load_document_filters",
         return_value=mocker.MagicMock(form_types={}),
     )
+    mocker.patch("idi_sec_scraper.processor.pipeline.ManifestWriter")
     sec_client = mocker.MagicMock()
     sec_client.SEC_HEADERS = {}
     return cls(config, sec_client)
@@ -61,25 +62,25 @@ def _make_pipeline(mocker, cls, config):
 # ---------------------------------------------------------------------------
 
 
-class TestS3Prefix:
-    """Tests for _s3_prefix()."""
+class TestFilingS3Prefix:
+    """Tests for filing_s3_prefix()."""
 
     def test_structure(self):
-        prefix = _s3_prefix(_BUCKET, _FILING)
-        assert prefix == ("s3://test-bucket/2026-02-24/8-K/320193/000114036126006577")
+        prefix = filing_s3_prefix(_BUCKET, _FILING)
+        assert prefix == ("s3://test-bucket/sec/2026-02-24/8-K/320193/000114036126006577")
 
     def test_unsafe_form_type_chars_replaced(self):
         filing = dataclasses.replace(_FILING, form_type="10-K/A")
-        prefix = _s3_prefix(_BUCKET, filing)
+        prefix = filing_s3_prefix(_BUCKET, filing)
         assert "/10-K_A/" in prefix
 
     def test_space_in_form_type_replaced(self):
         filing = dataclasses.replace(_FILING, form_type="SCHEDULE 13G/A")
-        prefix = _s3_prefix(_BUCKET, filing)
+        prefix = filing_s3_prefix(_BUCKET, filing)
         assert "/SCHEDULE_13G_A/" in prefix
 
     def test_accession_number_dashes_removed(self):
-        prefix = _s3_prefix(_BUCKET, _FILING)
+        prefix = filing_s3_prefix(_BUCKET, _FILING)
         assert "000114036126006577" in prefix
         assert "0001140361-26-006577" not in prefix
 
@@ -253,6 +254,58 @@ class TestHistoricalLoadInput:
         )
         mock_cls.return_value.discover.assert_called_once_with("s3://bucket/submissions.zip", None)
 
+    def test_https_url_streams_to_s3_then_discovers_from_s3(self, mocker):
+        mocker.patch(
+            "idi_sec_scraper.processor.pipeline.load_document_filters",
+            return_value=mocker.MagicMock(form_types={}),
+        )
+        mock_cls = mocker.patch("idi_sec_scraper.processor.pipeline.HistoricalDiscovery")
+        mock_cls.return_value.discover.return_value = []
+        mock_stream = mocker.patch("idi_sec_scraper.processor.pipeline.save_stream")
+        sec_client = mocker.MagicMock()
+        sec_client.SEC_HEADERS = {"User-Agent": "test"}
+        https_url = "https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
+        config = HistoricalPipelineConfig(
+            bucket=_BUCKET,
+            document_filters_path=_FILTERS_PATH,
+            submissions_url=https_url,
+        )
+        pipeline = HistoricalSECScraperPipeline(config, sec_client)
+        pipeline.load_input()
+
+        sec_client.session.get.assert_called_once_with(
+            https_url, headers={"User-Agent": "test"}, stream=True
+        )
+        mock_stream.assert_called_once_with(
+            sec_client.session.get.return_value.raw,
+            f"s3://{_BUCKET}/sec/submissions.zip",
+        )
+        mock_cls.return_value.discover.assert_called_once_with(
+            f"s3://{_BUCKET}/sec/submissions.zip", None
+        )
+
+    def test_s3_url_skips_download(self, mocker):
+        mocker.patch(
+            "idi_sec_scraper.processor.pipeline.load_document_filters",
+            return_value=mocker.MagicMock(form_types={}),
+        )
+        mock_cls = mocker.patch("idi_sec_scraper.processor.pipeline.HistoricalDiscovery")
+        mock_cls.return_value.discover.return_value = []
+        mock_stream = mocker.patch("idi_sec_scraper.processor.pipeline.save_stream")
+        sec_client = mocker.MagicMock()
+        sec_client.SEC_HEADERS = {}
+        config = HistoricalPipelineConfig(
+            bucket=_BUCKET,
+            document_filters_path=_FILTERS_PATH,
+            submissions_url="s3://bucket/submissions.zip",
+        )
+        pipeline = HistoricalSECScraperPipeline(config, sec_client)
+        pipeline.load_input()
+
+        mock_stream.assert_not_called()
+        sec_client.session.get.assert_not_called()
+        mock_cls.return_value.discover.assert_called_once_with("s3://bucket/submissions.zip", None)
+
     def test_discovery_held_as_attribute(self, mocker):
         from idi_sec_scraper.processor.document_filters import DocumentFilterConfig, FormTypeConfig
 
@@ -350,7 +403,7 @@ _MANIFEST_DICT = {
 }
 
 
-def _patch_scrape_deps(mocker, *, index_html="<html/>", docs=None, cached=False):
+def _patch_scrape_deps(mocker, *, index_html=b"<html/>", docs=None, cached=False):
     """Patch all external dependencies of _scrape_filing and return mocks."""
     if docs is None:
         docs = []
@@ -622,7 +675,7 @@ class TestScrapeFiling:
     def test_reads_from_s3_when_manifest_cached_historical(self, mocker):
         _patch_scrape_deps(mocker, cached=True)
         mock_load_content = mocker.patch(
-            "idi_sec_scraper.processor.pipeline.load_content", return_value="<html/>"
+            "idi_sec_scraper.processor.pipeline.load_content", return_value=b"<html/>"
         )
         pipeline = _make_pipeline(
             mocker,
@@ -641,7 +694,7 @@ class TestScrapeFiling:
     def test_reads_from_s3_when_manifest_cached_daily(self, mocker):
         _patch_scrape_deps(mocker, cached=True)
         mock_load_content = mocker.patch(
-            "idi_sec_scraper.processor.pipeline.load_content", return_value="<html/>"
+            "idi_sec_scraper.processor.pipeline.load_content", return_value=b"<html/>"
         )
         pipeline = _make_pipeline(
             mocker,
@@ -917,7 +970,7 @@ class TestProcess:
         pipeline.process([_FILING])
 
         pipeline.sec_client.query_endpoint.assert_not_called()
-        assert pipeline.stats.skipped_filings == 1
+        assert pipeline.stats.skipped_known_failure_filings == 1
         assert pipeline.stats.failed_filings == 0
 
     def test_known_failure_not_double_counted_as_failed(self, mocker):
@@ -935,7 +988,7 @@ class TestProcess:
 
         pipeline.process([_FILING])
 
-        assert pipeline.stats.skipped_filings == 1
+        assert pipeline.stats.skipped_known_failure_filings == 1
         assert pipeline.stats.failed_filings == 0
         assert pipeline.stats.total_filings == 1
 
@@ -946,6 +999,7 @@ class TestProcess:
             "idi_sec_scraper.processor.pipeline.load_document_filters",
             return_value=DocumentFilterConfig(form_types={"8-K": FormTypeConfig(match="8-K")}),
         )
+        mocker.patch("idi_sec_scraper.processor.pipeline.ManifestWriter")
         _patch_scrape_deps(mocker, docs=[_DOC])
         sec_client = mocker.MagicMock()
         sec_client.SEC_HEADERS = {}
@@ -955,9 +1009,9 @@ class TestProcess:
         )
         pipeline.sec_client.query_endpoint.return_value = {"status_code": 200, "data": "<html/>"}
 
-        results = pipeline.process([_FILING])
+        pipeline.process([_FILING])
 
-        assert len(results) == 1
+        assert pipeline.manifest_writer.add.call_count == 1
         assert pipeline.stats.scraped_filings == 1
         assert pipeline.stats.failed_filings == 0
         assert pipeline.stats.form_type_filings_total["8-K"] == 1
@@ -970,6 +1024,7 @@ class TestProcess:
             "idi_sec_scraper.processor.pipeline.load_document_filters",
             return_value=DocumentFilterConfig(form_types={"8-K": FormTypeConfig(match="8-K")}),
         )
+        mocker.patch("idi_sec_scraper.processor.pipeline.ManifestWriter")
         _patch_scrape_deps(mocker)
         sec_client = mocker.MagicMock()
         sec_client.SEC_HEADERS = {}
@@ -979,11 +1034,12 @@ class TestProcess:
         )
         pipeline.sec_client.query_endpoint.return_value = {"status_code": 404, "error": "Not Found"}
 
-        results = pipeline.process([_FILING])
+        pipeline.process([_FILING])
 
-        assert results == []
+        pipeline.manifest_writer.add.assert_not_called()
         assert pipeline.stats.failed_filings == 1
-        assert pipeline.stats.skipped_filings == 0
+        assert pipeline.stats.skipped_cached_filings == 0
+        assert pipeline.stats.skipped_known_failure_filings == 0
         assert pipeline.stats.form_type_filings_total["8-K"] == 1
 
     def test_fully_cached_filing_counted_as_skipped_not_scraped(self, mocker):
@@ -1018,10 +1074,10 @@ class TestProcess:
             ),
         )
 
-        results = pipeline.process([_FILING])
+        pipeline.process([_FILING])
 
-        assert results == []
-        assert pipeline.stats.skipped_filings == 1
+        pipeline.manifest_writer.add.assert_not_called()
+        assert pipeline.stats.skipped_cached_filings == 1
         assert pipeline.stats.scraped_filings == 0
         assert pipeline.stats.failed_filings == 0
         pipeline.sec_client.query_endpoint.assert_not_called()
@@ -1051,8 +1107,9 @@ class TestProcess:
         )
         pipeline.sec_client.query_endpoint.return_value = {"status_code": 200, "data": "content"}
 
-        results = pipeline.process([_FILING])
+        pipeline.process([_FILING])
 
-        assert len(results) == 1
+        assert pipeline.manifest_writer.add.call_count == 1
         assert pipeline.stats.scraped_filings == 1
-        assert pipeline.stats.skipped_filings == 0
+        assert pipeline.stats.skipped_cached_filings == 0
+        assert pipeline.stats.skipped_known_failure_filings == 0

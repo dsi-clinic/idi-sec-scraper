@@ -7,7 +7,11 @@ import datetime
 import pandas as pd
 
 # Application imports
-from idi_sec_scraper.processor.manifest import _filings_to_df, update_bucket_manifest
+from idi_sec_scraper.processor.manifest import (
+    ManifestWriter,
+    _filings_to_df,
+    update_bucket_manifest,
+)
 from idi_sec_scraper.processor.types import ScrapedDocument, ScrapedFiling
 
 _FILING = ScrapedFiling(
@@ -134,14 +138,14 @@ class TestUpdateBucketManifest:
         read_mock.assert_not_called()
         write_mock.assert_not_called()
 
-    def test_creates_new_manifest_when_none_exists(self, mocker, tmp_path):
+    def test_creates_new_manifest_when_none_exists(self, mocker):
         mocker.patch(
             "idi_sec_scraper.processor.manifest.pd.read_parquet",
             side_effect=FileNotFoundError,
         )
         written: list[pd.DataFrame] = []
 
-        def capture_write(self_df: pd.DataFrame, path: str, **kwargs: object) -> None:
+        def capture_write(self_df: pd.DataFrame, _path: str, **_kwargs: object) -> None:
             written.append(self_df.copy())
 
         mocker.patch("pandas.DataFrame.to_parquet", capture_write)
@@ -174,7 +178,7 @@ class TestUpdateBucketManifest:
         mocker.patch("idi_sec_scraper.processor.manifest.pd.read_parquet", return_value=existing)
         written: list[pd.DataFrame] = []
 
-        def capture_write(self_df: pd.DataFrame, path: str, **kwargs: object) -> None:
+        def capture_write(self_df: pd.DataFrame, _path: str, **_kwargs: object) -> None:
             written.append(self_df.copy())
 
         mocker.patch("pandas.DataFrame.to_parquet", capture_write)
@@ -225,10 +229,66 @@ class TestUpdateBucketManifest:
         )
         paths: list[str] = []
 
-        def capture_write(self_df: pd.DataFrame, path: str, **kwargs: object) -> None:
+        def capture_write(_self_df: pd.DataFrame, path: str, **_kwargs: object) -> None:
             paths.append(path)
 
         mocker.patch("pandas.DataFrame.to_parquet", capture_write)
         update_bucket_manifest("my-bucket", [_FILING])
 
-        assert paths == ["s3://my-bucket/manifest.parquet"]
+        assert paths == ["s3://my-bucket/sec/manifest.parquet"]
+
+
+class TestManifestWriter:
+    """Tests for ManifestWriter."""
+
+    def _patch_manifest(self, mocker):
+        mocker.patch(
+            "idi_sec_scraper.processor.manifest.pd.read_parquet",
+            side_effect=FileNotFoundError,
+        )
+        written: list[list] = []
+
+        def capture_write(self_df, _path, **_kwargs):
+            written.append(list(self_df["s3_key"]))
+
+        mocker.patch("pandas.DataFrame.to_parquet", capture_write)
+        return written
+
+    def test_add_below_threshold_does_not_flush(self, mocker):
+        written = self._patch_manifest(mocker)
+        writer = ManifestWriter("test-bucket", flush_every=5)
+        writer.add(_FILING)
+        assert written == []
+
+    def test_add_at_threshold_flushes(self, mocker):
+        written = self._patch_manifest(mocker)
+        writer = ManifestWriter("test-bucket", flush_every=2)
+        writer.add(_FILING)
+        assert written == []
+        writer.add(_FILING)
+        assert len(written) == 1
+
+    def test_flush_writes_buffered_filings(self, mocker):
+        written = self._patch_manifest(mocker)
+        writer = ManifestWriter("test-bucket", flush_every=1000)
+        writer.add(_FILING)
+        writer.flush()
+        assert len(written) == 1
+
+    def test_flush_clears_buffer(self, mocker):
+        written = self._patch_manifest(mocker)
+        writer = ManifestWriter("test-bucket", flush_every=1000)
+        writer.add(_FILING)
+        writer.flush()
+        writer.flush()
+        assert len(written) == 1
+
+    def test_flush_noop_when_buffer_empty(self, mocker):
+        written = self._patch_manifest(mocker)
+        writer = ManifestWriter("test-bucket", flush_every=1000)
+        writer.flush()
+        assert written == []
+
+    def test_default_flush_every_is_1000(self):
+        writer = ManifestWriter("test-bucket")
+        assert writer._flush_every == 1000

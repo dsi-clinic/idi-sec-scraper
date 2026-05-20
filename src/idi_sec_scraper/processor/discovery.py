@@ -6,11 +6,14 @@ import json
 import re
 import zipfile
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Iterator
+
+# Third party imports
+from idi_ftm2j_shared.failures import FailureRegistry
+from idi_ftm2j_shared.logs import get_logger
 
 # Application imports
 from idi_sec_scraper.common.api import SecClient
-from idi_sec_scraper.common.failures import FailureRegistry
-from idi_sec_scraper.common.logs import get_logger
 from idi_sec_scraper.common.storage import open_zip
 from idi_sec_scraper.processor.failures import FailureType
 from idi_sec_scraper.processor.types import DiscoveredFiling
@@ -31,9 +34,11 @@ class Discovery(ABC):
         self.sec_client = sec_client
         self.form_types = form_types
         self.cutoffs: dict[str, datetime.date | None] = cutoffs or {}
+        self.ciks_scanned: int = 0
+        self.total_ciks: int = 0
 
     @abstractmethod
-    def discover(self, *args, **kwargs) -> list[DiscoveredFiling]:
+    def discover(self, *args, **kwargs) -> Iterable[DiscoveredFiling]:
         """Return matching filings from the discovery source."""
         ...
 
@@ -145,12 +150,16 @@ class HistoricalDiscovery(Discovery):
         super().__init__(sec_client, form_types, cutoffs)
         self.failure_registry = failure_registry
 
-    def discover(self, submissions_url: str, max_ciks: int | None = None) -> list[DiscoveredFiling]:
-        """Read each ``CIK*.json`` in the archive and return matching filings.
+    def discover(
+        self, submissions_url: str, max_ciks: int | None = None
+    ) -> Iterator[DiscoveredFiling]:
+        """Read each ``CIK*.json`` in the archive and yield matching filings.
 
         Combines recent filings with any overflow files referenced in
-        ``filings.files``, filters by ``form_types``, and returns a
-        :class:`DiscoveredFiling` for each match.
+        ``filings.files``, filters by ``form_types``, and yields a
+        :class:`DiscoveredFiling` for each match. Filings are yielded lazily
+        as each CIK file is parsed, keeping memory use O(1) with respect to
+        the total number of matching filings.
 
         Args:
             submissions_url: Local path, ``s3://`` URL, or ``https://`` URL to
@@ -158,17 +167,19 @@ class HistoricalDiscovery(Discovery):
             max_ciks: If set, process at most this many CIK files. Useful for
                 testing without running the full archive.
 
-        Returns:
-            List of :class:`DiscoveredFiling` objects for all matching rows.
+        Yields:
+            :class:`DiscoveredFiling` objects for all matching rows.
         """
-        filings = []
         with open_zip(submissions_url, headers=self.sec_client.SEC_HEADERS) as zf:
             names = zf.namelist()
+            cik_names = [n for n in names if n.startswith("CIK") and n.endswith(".json")]
             if max_ciks is not None:
-                names = [n for n in names if n.startswith("CIK") and n.endswith(".json")][:max_ciks]
-            for filename in names:
-                filings.extend(self._parse_cik_file(zf, filename))
-        return filings
+                cik_names = cik_names[:max_ciks]
+            self.total_ciks = len(cik_names)
+            _logger.info("Starting discovery: %d CIK files to process", self.total_ciks)
+            for i, filename in enumerate(cik_names, 1):
+                yield from self._parse_cik_file(zf, filename)
+                self.ciks_scanned = i
 
     def _parse_cik_file(self, zf: zipfile.ZipFile, filename: str) -> list[DiscoveredFiling]:
         if _IS_OVERFLOW.search(filename):
@@ -176,8 +187,12 @@ class HistoricalDiscovery(Discovery):
         if not (filename.startswith("CIK") and filename.endswith(".json")):
             return []
 
-        with zf.open(filename) as f:
-            data = json.load(f)
+        try:
+            with zf.open(filename) as f:
+                data = json.load(f)
+        except (EOFError, json.JSONDecodeError) as e:
+            _logger.error("Failed to read %s: %s", filename, e)
+            return []
 
         cik = str(int(data.get("cik", "") or 0)) if data.get("cik") else ""
         company_name = data.get("name", "")
