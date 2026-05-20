@@ -20,7 +20,7 @@ from idi_sec_scraper.common.storage import (
     load_json,
     save_content,
     save_json,
-    stream_to_s3,
+    save_stream,
 )
 from idi_sec_scraper.processor.discovery import DailyDiscovery, Discovery, HistoricalDiscovery
 from idi_sec_scraper.processor.document_filters import (
@@ -296,7 +296,7 @@ class SECScraperPipeline(Pipeline, ABC):
         filing_index_s3_key = f"{prefix}/index.htm"
 
         if key_exists(filing_manifest_s3_key):
-            index_html = load_content(filing_index_s3_key)
+            index_html = load_content(filing_index_s3_key).decode()
             manifest_data = load_json(filing_manifest_s3_key)
             return index_html, _scraped_filing_from_dict(manifest_data), True
 
@@ -316,7 +316,7 @@ class SECScraperPipeline(Pipeline, ABC):
                 self.failure_registry.add((filing.cik, filing.accession_number), failure_type)
             return None
 
-        save_content(filing_index_s3_key, response["data"])
+        save_content(filing_index_s3_key, response["data"].encode(), compress=True)
         return response["data"], _new_scraped_filing(filing), False
 
     def _scrape_filing(self, filing: DiscoveredFiling) -> tuple[ScrapedFiling, bool] | None:
@@ -429,7 +429,7 @@ class SECScraperPipeline(Pipeline, ABC):
                 continue
 
             doc_s3_url = f"{prefix}/{doc.filename}"
-            save_content(doc_s3_url, doc_response["data"])
+            save_content(doc_s3_url, doc_response["data"].encode(), compress=True)
 
             scraped_filing.documents.append(
                 ScrapedDocument(
@@ -475,7 +475,7 @@ class HistoricalSECScraperPipeline(SECScraperPipeline):
             )
             response.raise_for_status()
             response.raw.decode_content = True
-            stream_to_s3(response.raw, s3_url)
+            save_stream(response.raw, s3_url)
             self.logger.info("Download complete, reading from %s", s3_url)
             submissions_url = s3_url
         return self.discovery.discover(submissions_url, self.config.max_ciks)

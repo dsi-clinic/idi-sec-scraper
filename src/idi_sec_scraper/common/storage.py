@@ -2,10 +2,11 @@
 
 # Standard library imports
 import gzip
+import io
 import json
 import os
 import pathlib
-import tempfile
+import shutil
 import threading
 import zipfile
 from collections.abc import Iterator
@@ -19,6 +20,10 @@ from botocore.exceptions import ClientError
 
 _s3_client = None
 _s3_client_lock = threading.Lock()
+
+# Files larger than this after compression use multipart upload; below it use put_object.
+# 5MB is S3's minimum part size, so single-part is the only valid option below this threshold.
+_MULTIPART_THRESHOLD = 5 * 1024 * 1024
 
 
 def _get_s3_client() -> boto3.client:
@@ -38,13 +43,36 @@ def _get_s3_client() -> boto3.client:
     return _s3_client
 
 
-def _s3_tp(path: str, extra: dict | None = None) -> dict:
-    """Return transport_params for smart_open; injects shared S3 client only for s3:// paths."""
-    if not path.startswith("s3://"):
-        return {}
-    params = dict(extra or {})
-    params["client"] = _get_s3_client()
-    return params
+def _is_s3(path: str) -> bool:
+    """Return True if path is an S3 URL."""
+    return path.startswith("s3://")
+
+
+def _parse_s3_url(file_path: str) -> tuple[str, str]:
+    """Parse an ``s3://bucket/key`` URL into ``(bucket, key)``."""
+    without_scheme = file_path[5:]
+    bucket, _, key = without_scheme.partition("/")
+    return bucket, key
+
+
+def _s3_get_bytes(bucket: str, key: str) -> bytes | None:
+    """Fetch an S3 object and return its bytes, decompressing if gzip-encoded.
+
+    Returns ``None`` when the key does not exist.
+
+    Raises:
+        botocore.exceptions.ClientError: If an error other than ``NoSuchKey`` occurs.
+    """
+    try:
+        response = _get_s3_client().get_object(Bucket=bucket, Key=key)
+        body = response["Body"].read()
+        if response.get("ContentEncoding") == "gzip":
+            body = gzip.decompress(body)
+        return body
+    except ClientError as e:
+        if e.response.get("Error", {}).get("Code") == "NoSuchKey":
+            return None
+        raise
 
 
 def _empty_for_return_type(return_type: str) -> dict | list:
@@ -59,62 +87,53 @@ def _empty_for_return_type(return_type: str) -> dict | list:
 def load_json(file_path: str, return_type: str = "dict") -> dict | list:
     """Load a JSON file from a local path or S3 URL.
 
-    Supports any path scheme understood by ``smart_open`` (local, ``s3://``).
-    Missing files — locally absent or absent on S3 — are treated as empty and
-    return the appropriate empty container instead of raising.
+    Missing files return an empty container instead of raising. S3 objects
+    with ``ContentEncoding: gzip`` are transparently decompressed.
 
     Args:
-        file_path: Local filesystem path or ``s3://bucket/key`` URL of the JSON file.
-        return_type: Expected top-level type of the JSON document — ``"dict"`` or
-            ``"list"``. Controls the empty value returned when the file is absent.
-            Raises ``ValueError`` for any other value.
+        file_path: Local filesystem path or ``s3://bucket/key`` URL.
+        return_type: Expected top-level type — ``"dict"`` or ``"list"``.
 
     Returns:
-        Parsed JSON content as a ``dict`` or ``list``. Returns an empty ``dict`` or
-        ``list`` (per ``return_type``) when the file does not exist.
+        Parsed JSON as a ``dict`` or ``list``, or an empty container when missing.
 
     Raises:
         ValueError: If ``return_type`` is not ``"dict"`` or ``"list"``.
         botocore.exceptions.ClientError: If an S3 error other than ``NoSuchKey`` occurs.
         json.JSONDecodeError: If the file exists but contains invalid JSON.
     """
+    if _is_s3(file_path):
+        bucket, key = _parse_s3_url(file_path)
+        body = _s3_get_bytes(bucket, key)
+        return json.loads(body) if body is not None else _empty_for_return_type(return_type)
     try:
-        with smart_open.open(file_path, transport_params=_s3_tp(file_path)) as f:
-            return json.load(f)
-
-    except (FileNotFoundError, OSError):
+        return json.loads(pathlib.Path(file_path).read_text())
+    except FileNotFoundError:
         return _empty_for_return_type(return_type)
 
-    except ClientError as e:
-        if e.response.get("Error", {}).get("Code") == "NoSuchKey":
-            return _empty_for_return_type(return_type)
-        raise
 
+def save_json(file_path: str, data: dict | list, compress: bool = False) -> None:
+    """Save data as JSON to a local path or S3 URL.
 
-def save_json(file_path: str, data: dict | list, mode: str = "w") -> None:
-    """Save a JSON file to the given path.
-
-    Efficient writing: https://github.com/piskvorky/smart_open/blob/develop/howto.md#how-to-write-to-s3-efficiently
-
-    Can write in append mode for local files, S3 files are always overwritten.
+    S3 writes use a single ``put_object`` call (1 PUT request). Local writes
+    overwrite the file.
 
     Args:
-        file_path: The path to the JSON file.
-        data: The JSON data to save to the file as a dictionary or list.
-        mode: File open mode ("w" to overwrite, "a" to append). S3 paths always overwrite.
+        file_path: Local filesystem path or ``s3://bucket/key`` URL.
+        data: The JSON-serialisable dict or list to write.
+        compress: If True, gzip-compress before uploading to S3.
     """
-    try:
-        if file_path.startswith("s3://"):
-            with tempfile.NamedTemporaryFile() as tmp:
-                with smart_open.open(
-                    file_path, "w", transport_params=_s3_tp(file_path, {"writebuffer": tmp})
-                ) as fout:
-                    json.dump(data, fout, indent=2)
+    encoded = json.dumps(data, indent=2).encode()
+    if _is_s3(file_path):
+        bucket, key = _parse_s3_url(file_path)
+        if compress:
+            _get_s3_client().put_object(
+                Bucket=bucket, Key=key, Body=gzip.compress(encoded), ContentEncoding="gzip"
+            )
         else:
-            with smart_open.open(file_path, mode) as fout:
-                json.dump(data, fout, indent=2)
-    except ValueError as e:
-        raise ValueError(f"Failed to save JSON to {file_path!r}: {e}") from e
+            _get_s3_client().put_object(Bucket=bucket, Key=key, Body=encoded)
+    else:
+        pathlib.Path(file_path).write_bytes(encoded)
 
 
 def key_exists(file_path: str) -> bool:
@@ -132,10 +151,9 @@ def key_exists(file_path: str) -> bool:
     Raises:
         botocore.exceptions.ClientError: If an S3 error other than ``NoSuchKey``/404 occurs.
     """
-    if not file_path.startswith("s3://"):
+    if not _is_s3(file_path):
         return pathlib.Path(file_path).exists()
-    without_scheme = file_path[5:]
-    bucket, _, key = without_scheme.partition("/")
+    bucket, key = _parse_s3_url(file_path)
     try:
         _get_s3_client().head_object(Bucket=bucket, Key=key)
         return True
@@ -145,80 +163,78 @@ def key_exists(file_path: str) -> bool:
         raise
 
 
-def load_content(file_path: str) -> str:
-    """Load text content from a local path or S3 URL.
+def load_content(file_path: str) -> bytes:
+    """Load raw bytes from a local path or S3 URL.
 
-    Missing files return an empty string instead of raising. S3 objects with
+    Missing files return ``b""`` instead of raising. S3 objects with
     ``ContentEncoding: gzip`` are transparently decompressed.
 
     Args:
-        file_path: Local filesystem path or ``s3://`` URL of the text file.
+        file_path: Local filesystem path or ``s3://`` URL.
 
     Returns:
-        File contents as a string, or ``""`` when the file does not exist.
+        File contents as bytes, or ``b""`` when the file does not exist.
 
     Raises:
         botocore.exceptions.ClientError: If an S3 error other than ``NoSuchKey`` occurs.
     """
-    if file_path.startswith("s3://"):
-        without_scheme = file_path[5:]
-        bucket, _, key = without_scheme.partition("/")
-        try:
-            response = _get_s3_client().get_object(Bucket=bucket, Key=key)
-            body = response["Body"].read()
-            if response.get("ContentEncoding") == "gzip":
-                body = gzip.decompress(body)
-            return body.decode()
-        except (FileNotFoundError, OSError):
-            return ""
-        except ClientError as e:
-            if e.response.get("Error", {}).get("Code") == "NoSuchKey":
-                return ""
-            raise
+    if _is_s3(file_path):
+        bucket, key = _parse_s3_url(file_path)
+        body = _s3_get_bytes(bucket, key)
+        return body if body is not None else b""
     try:
-        with smart_open.open(file_path) as f:
-            return f.read()
-    except (FileNotFoundError, OSError):
-        return ""
+        return pathlib.Path(file_path).read_bytes()
+    except FileNotFoundError:
+        return b""
 
 
-def save_content(file_path: str, content: str) -> None:
-    """Save text content to a local path or S3 URL.
+def save_content(file_path: str, content: bytes, compress: bool = False) -> None:
+    """Save raw bytes to a local path or S3 URL.
 
-    S3 uploads are gzip-compressed with ``ContentEncoding: gzip`` set so
-    clients can transparently decompress. Local writes are uncompressed.
+    When ``compress=True``, S3 uploads are gzip-compressed with ``ContentEncoding:
+    gzip``; files below ``_MULTIPART_THRESHOLD`` after compression use a single
+    ``put_object`` call, larger files use multipart upload via ``upload_fileobj``.
+    Local writes are always uncompressed raw bytes regardless of ``compress``.
 
     Args:
         file_path: Local filesystem path or ``s3://`` URL to write to.
-        content: Text content to write.
+        content: Raw bytes to write.
+        compress: If True, gzip-compress before uploading to S3.
     """
-    if file_path.startswith("s3://"):
-        without_scheme = file_path[5:]
-        bucket, _, key = without_scheme.partition("/")
-        _get_s3_client().put_object(
-            Bucket=bucket,
-            Key=key,
-            Body=gzip.compress(content.encode()),
-            ContentEncoding="gzip",
-        )
+    if _is_s3(file_path):
+        bucket, key = _parse_s3_url(file_path)
+        if compress:
+            body = gzip.compress(content)
+            extra: dict = {"ContentEncoding": "gzip"}
+        else:
+            body = content
+            extra = {}
+        if len(body) < _MULTIPART_THRESHOLD:
+            _get_s3_client().put_object(Bucket=bucket, Key=key, Body=body, **extra)
+        else:
+            _get_s3_client().upload_fileobj(
+                io.BytesIO(body), bucket, key, ExtraArgs=extra if extra else None
+            )
     else:
-        try:
-            with smart_open.open(file_path, "w") as fout:
-                fout.write(content)
-        except ValueError as e:
-            raise ValueError(f"Failed to save content to {file_path!r}: {e}") from e
+        pathlib.Path(file_path).write_bytes(content)
 
 
-def stream_to_s3(fileobj: object, s3_url: str) -> None:
-    """Stream a file-like object directly to S3 using multipart upload.
+def save_stream(fileobj: object, file_path: str) -> None:
+    """Stream a file-like object to a local path or S3 URL.
+
+    S3 destinations use multipart upload via ``upload_fileobj``. Local
+    destinations are written in chunks via ``shutil.copyfileobj``.
 
     Args:
-        fileobj: Readable file-like object to upload.
-        s3_url: Destination ``s3://bucket/key`` URL.
+        fileobj: Readable binary file-like object to stream.
+        file_path: Destination local filesystem path or ``s3://bucket/key`` URL.
     """
-    without_scheme = s3_url[5:]
-    bucket, _, key = without_scheme.partition("/")
-    _get_s3_client().upload_fileobj(fileobj, bucket, key)
+    if _is_s3(file_path):
+        bucket, key = _parse_s3_url(file_path)
+        _get_s3_client().upload_fileobj(fileobj, bucket, key)
+    else:
+        with pathlib.Path(file_path).open("wb") as f:
+            shutil.copyfileobj(fileobj, f)
 
 
 @contextmanager
@@ -243,8 +259,8 @@ def open_zip(file_path: str, headers: dict | None = None) -> Iterator[zipfile.Zi
         zipfile.BadZipFile: If the file is not a valid ZIP archive.
         OSError: If the file cannot be opened or read.
     """
-    if file_path.startswith("s3://"):
-        tp = _s3_tp(file_path)
+    if _is_s3(file_path):
+        tp: dict = {"client": _get_s3_client()}
     elif headers:
         tp = {"headers": headers}
     else:
