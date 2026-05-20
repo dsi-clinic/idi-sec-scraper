@@ -261,7 +261,7 @@ class TestHistoricalLoadInput:
         )
         mock_cls = mocker.patch("idi_sec_scraper.processor.pipeline.HistoricalDiscovery")
         mock_cls.return_value.discover.return_value = []
-        mock_stream = mocker.patch("idi_sec_scraper.processor.pipeline.stream_to_s3")
+        mock_stream = mocker.patch("idi_sec_scraper.processor.pipeline.save_stream")
         sec_client = mocker.MagicMock()
         sec_client.SEC_HEADERS = {"User-Agent": "test"}
         https_url = "https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
@@ -291,7 +291,7 @@ class TestHistoricalLoadInput:
         )
         mock_cls = mocker.patch("idi_sec_scraper.processor.pipeline.HistoricalDiscovery")
         mock_cls.return_value.discover.return_value = []
-        mock_stream = mocker.patch("idi_sec_scraper.processor.pipeline.stream_to_s3")
+        mock_stream = mocker.patch("idi_sec_scraper.processor.pipeline.save_stream")
         sec_client = mocker.MagicMock()
         sec_client.SEC_HEADERS = {}
         config = HistoricalPipelineConfig(
@@ -403,7 +403,7 @@ _MANIFEST_DICT = {
 }
 
 
-def _patch_scrape_deps(mocker, *, index_html="<html/>", docs=None, cached=False):
+def _patch_scrape_deps(mocker, *, index_html=b"<html/>", docs=None, cached=False):
     """Patch all external dependencies of _scrape_filing and return mocks."""
     if docs is None:
         docs = []
@@ -675,7 +675,7 @@ class TestScrapeFiling:
     def test_reads_from_s3_when_manifest_cached_historical(self, mocker):
         _patch_scrape_deps(mocker, cached=True)
         mock_load_content = mocker.patch(
-            "idi_sec_scraper.processor.pipeline.load_content", return_value="<html/>"
+            "idi_sec_scraper.processor.pipeline.load_content", return_value=b"<html/>"
         )
         pipeline = _make_pipeline(
             mocker,
@@ -694,7 +694,7 @@ class TestScrapeFiling:
     def test_reads_from_s3_when_manifest_cached_daily(self, mocker):
         _patch_scrape_deps(mocker, cached=True)
         mock_load_content = mocker.patch(
-            "idi_sec_scraper.processor.pipeline.load_content", return_value="<html/>"
+            "idi_sec_scraper.processor.pipeline.load_content", return_value=b"<html/>"
         )
         pipeline = _make_pipeline(
             mocker,
