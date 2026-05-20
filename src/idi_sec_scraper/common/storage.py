@@ -22,8 +22,9 @@ _s3_client = None
 _s3_client_lock = threading.Lock()
 
 # Files larger than this after compression use multipart upload; below it use put_object.
-# 50MB is S3's minimum part size, so single-part is the only valid option below this threshold.
-_MULTIPART_THRESHOLD = 50 * 1024 * 1024
+# 100MB is the recommended threshold for using multipart upload.
+# https://docs.aws.amazon.com/AmazonS3/latest/userguide/mpuoverview.html.
+_MULTIPART_THRESHOLD = 100 * 1024 * 1024
 
 
 def _get_s3_client() -> boto3.client:
