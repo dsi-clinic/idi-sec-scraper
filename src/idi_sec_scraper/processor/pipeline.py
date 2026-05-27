@@ -11,10 +11,7 @@ from typing import Any
 # Third party imports
 from idi_ftm2j_shared.failures import FailureRegistry
 from idi_ftm2j_shared.logs import get_logger
-
-# Application imports
-from idi_sec_scraper.common.api import SecClient
-from idi_sec_scraper.common.storage import (
+from idi_ftm2j_shared.storage import (
     key_exists,
     load_content,
     load_json,
@@ -22,6 +19,9 @@ from idi_sec_scraper.common.storage import (
     save_json,
     save_stream,
 )
+
+# Application imports
+from idi_sec_scraper.common.api import SecClient
 from idi_sec_scraper.processor.discovery import DailyDiscovery, Discovery, HistoricalDiscovery
 from idi_sec_scraper.processor.document_filters import (
     find_form_type_entry,
