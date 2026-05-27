@@ -8,13 +8,14 @@ import zipfile
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Iterator
 
+# Application imports
+from idi_ftm2j_shared.api import SecClient
+
 # Third party imports
 from idi_ftm2j_shared.failures import FailureRegistry
 from idi_ftm2j_shared.logs import get_logger
 from idi_ftm2j_shared.storage import open_zip
 
-# Application imports
-from idi_sec_scraper.common.api import SecClient
 from idi_sec_scraper.processor.failures import FailureType
 from idi_sec_scraper.processor.types import DiscoveredFiling
 

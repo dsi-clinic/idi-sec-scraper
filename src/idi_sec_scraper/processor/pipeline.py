@@ -8,6 +8,9 @@ from collections.abc import Iterable
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from typing import Any
 
+# Application imports
+from idi_ftm2j_shared.api import SecClient
+
 # Third party imports
 from idi_ftm2j_shared.failures import FailureRegistry
 from idi_ftm2j_shared.logs import get_logger
@@ -20,8 +23,6 @@ from idi_ftm2j_shared.storage import (
     save_stream,
 )
 
-# Application imports
-from idi_sec_scraper.common.api import SecClient
 from idi_sec_scraper.processor.discovery import DailyDiscovery, Discovery, HistoricalDiscovery
 from idi_sec_scraper.processor.document_filters import (
     find_form_type_entry,
