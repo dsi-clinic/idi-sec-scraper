@@ -5,24 +5,15 @@ with other tools in the same bucket.  Change ``_ROOT`` here to relocate
 everything at once.
 """
 
-import re
-
-from idi_sec_scraper.types import DiscoveredFiling
+from idi_ftm2j_shared.sec import s3_prefix
+from idi_ftm2j_shared.types import DiscoveredFiling
 
 _ROOT = "sec"
-
-# Matches any character not in the S3-safe set; used to sanitise form types.
-_SAFE_RE = re.compile(r"[^0-9a-zA-Z!._*'()-]")
 
 
 def filing_s3_prefix(bucket: str, filing: DiscoveredFiling) -> str:
     """Return the S3 prefix (no trailing slash) for all files in a filing."""
-    form_type_safe = _SAFE_RE.sub("_", filing.form_type)
-    accession_nodash = filing.accession_number.replace("-", "")
-    return (
-        f"s3://{bucket}/{_ROOT}"
-        f"/{filing.filing_date}/{form_type_safe}/{filing.cik}/{accession_nodash}"
-    )
+    return f"s3://{bucket}/{s3_prefix(filing.form_type, filing.filing_date, filing.cik, filing.accession_number)}"
 
 
 def manifest_s3_path(bucket: str) -> str:

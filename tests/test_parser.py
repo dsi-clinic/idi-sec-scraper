@@ -4,10 +4,12 @@
 import dataclasses
 import datetime
 
+from idi_ftm2j_shared.types import DiscoveredFiling
+
 # Application imports
 from idi_sec_scraper.failures import FailureType
 from idi_sec_scraper.parser import parse_index_htm, validate_parsed_filing
-from idi_sec_scraper.types import DiscoveredFiling, ParsedFiling
+from idi_sec_scraper.types import ParsedFiling
 
 _SAMPLE_URL = "https://www.sec.gov/Archives/edgar/data/320193/000114036126006577/0001140361-26-006577-index.htm"
 

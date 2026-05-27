@@ -22,6 +22,7 @@ from idi_ftm2j_shared.storage import (
     save_json,
     save_stream,
 )
+from idi_ftm2j_shared.types import DiscoveredFiling, ScrapedDocument, ScrapedFiling
 
 from idi_sec_scraper.discovery import DailyDiscovery, Discovery, HistoricalDiscovery
 from idi_sec_scraper.document_filters import (
@@ -34,12 +35,9 @@ from idi_sec_scraper.manifest import ManifestWriter
 from idi_sec_scraper.parser import parse_index_htm
 from idi_sec_scraper.paths import filing_s3_prefix
 from idi_sec_scraper.types import (
-    DiscoveredFiling,
     DocumentFilterConfig,
     PipelineConfig,
     PipelineStats,
-    ScrapedDocument,
-    ScrapedFiling,
 )
 
 

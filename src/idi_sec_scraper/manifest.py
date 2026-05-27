@@ -7,10 +7,10 @@ import pandas as pd
 
 # Third party imports
 from idi_ftm2j_shared.logs import get_logger
+from idi_ftm2j_shared.types import ScrapedFiling
 
 # Application imports
 from idi_sec_scraper.paths import manifest_s3_path
-from idi_sec_scraper.types import ScrapedFiling
 
 _logger = get_logger(__name__)
 

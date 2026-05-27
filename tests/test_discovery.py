@@ -10,18 +10,23 @@ import zipfile
 from idi_ftm2j_shared.failures import FailureRegistry
 
 # Application imports
+from idi_ftm2j_shared.sec import (
+    _accession_from_url,
+    _find_form_type_col,
+    _parse_yyyymmdd,
+)
+from idi_ftm2j_shared.sec import (
+    _daily_index_url as _crawler_idx_url,
+)
+from idi_ftm2j_shared.types import DiscoveredFiling
+
 from idi_sec_scraper.discovery import (
     DailyDiscovery,
     Discovery,
     HistoricalDiscovery,
-    _accession_from_url,
     _before_cutoff,
-    _crawler_idx_url,
-    _find_form_type_col,
     _matches_form_types,
-    _parse_yyyymmdd,
 )
-from idi_sec_scraper.types import DiscoveredFiling
 
 # Minimal crawler.idx fixture matching the real SEC format.
 # "Form Type" header label determines the column split point dynamically.
@@ -199,24 +204,25 @@ class TestDiscoverDaily:
 
         assert len(result) == 2
 
-    def test_missing_day_logs_warning(self, mocker):
+    def test_missing_day_logs_error(self, mocker):
         client = mocker.MagicMock()
         client.SEC_HEADERS = {}
         client.query_endpoint.return_value = {"status_code": 404, "error": "HTTP 404"}
-        mock_logger = mocker.patch("idi_sec_scraper.discovery._logger")
+        mock_logger = mocker.patch("idi_ftm2j_shared.sec._logger")
         DailyDiscovery(client, ["8-K"]).discover(
             datetime.date(2026, 4, 1), datetime.date(2026, 4, 1)
         )
 
-        mock_logger.warning.assert_called_once()
+        mock_logger.error.assert_called_once()
 
-    def test_end_date_before_start_returns_empty(self, mocker):
+    def test_end_date_before_start_raises(self, mocker):
+        import pytest
+
         client = _make_sec_client(mocker)
-        result = DailyDiscovery(client, ["8-K"]).discover(
-            datetime.date(2026, 4, 3), datetime.date(2026, 4, 1)
-        )
-
-        assert result == []
+        with pytest.raises(ValueError):
+            DailyDiscovery(client, ["8-K"]).discover(
+                datetime.date(2026, 4, 3), datetime.date(2026, 4, 1)
+            )
 
 
 class TestFindFormTypeCol:

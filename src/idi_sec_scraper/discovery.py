@@ -14,10 +14,11 @@ from idi_ftm2j_shared.api import SecClient
 # Third party imports
 from idi_ftm2j_shared.failures import FailureRegistry
 from idi_ftm2j_shared.logs import get_logger
+from idi_ftm2j_shared.sec import get_daily_index
 from idi_ftm2j_shared.storage import open_zip
+from idi_ftm2j_shared.types import DiscoveredFiling
 
 from idi_sec_scraper.failures import FailureType
-from idi_sec_scraper.types import DiscoveredFiling
 
 _logger = get_logger("discovery")
 
@@ -44,20 +45,6 @@ class Discovery(ABC):
         ...
 
 
-# After the company name column, fields are separated by runs of 2+ spaces.
-# Form types can contain single spaces (e.g. "SCHEDULE 13G/A"), so we use
-# \s{2,} — the padding between columns — as the field boundary.
-_FIELDS_RE = re.compile(
-    r"(.+?)\s{2,}"  # form type — ends at first run of 2+ spaces
-    r"(\d+)\s+"  # CIK
-    r"(\d{8})\s+"  # date filed (YYYYMMDD)
-    r"(https?://\S+)"  # URL
-)
-
-_CRAWLER_IDX_URL = (
-    "https://www.sec.gov/Archives/edgar/daily-index/{year}/QTR{quarter}/crawler.{date}.idx"
-)
-
 _IS_OVERFLOW = re.compile(r"-submissions-\d+\.json$")
 
 _INDEX_HTM_URL = (
@@ -71,10 +58,7 @@ class DailyDiscovery(Discovery):
     def discover(
         self, start_date: datetime.date, end_date: datetime.date
     ) -> list[DiscoveredFiling]:
-        """Fetch filings for each date in ``[start_date, end_date]``, inclusive.
-
-        Dates with no published index (e.g. weekends, holidays) are skipped
-        with a warning log.
+        """Fetch all filings for ``[start_date, end_date]`` and filter by form type and cutoffs.
 
         Args:
             start_date: First date to include, inclusive.
@@ -83,58 +67,14 @@ class DailyDiscovery(Discovery):
         Returns:
             List of :class:`DiscoveredFiling` objects ordered by date ascending.
         """
-        filings = []
-        date = start_date
-        while date <= end_date:
-            filings.extend(self._discover_date(date))
-            date += datetime.timedelta(days=1)
-        return filings
-
-    def _discover_date(self, date: datetime.date) -> list[DiscoveredFiling]:
-        url = _crawler_idx_url(date)
-        response = self.sec_client.query_endpoint(sec_url=url, return_json=False)
-
-        if "error" in response:
-            _logger.warning("No crawler index available for %s — skipping", date)
-            return []
-
-        content = response.get("data", "")
-        lines = content.splitlines()
-        form_type_col = _find_form_type_col(lines)
-        if form_type_col is None:
-            return []
-
-        filings = []
-        for line in lines:
-            if len(line) <= form_type_col:
-                continue
-
-            company_name = line[:form_type_col].strip()
-            match = _FIELDS_RE.match(line[form_type_col:])
-            if not match:
-                continue
-
-            form_type = match.group(1).strip()
-            if not _matches_form_types(form_type, self.form_types):
-                continue
-
-            filing_date = _parse_yyyymmdd(match.group(3))
-            if _before_cutoff(form_type, filing_date, self.form_types, self.cutoffs):
-                continue
-
-            filing_url = match.group(4)
-            filings.append(
-                DiscoveredFiling(
-                    cik=match.group(2),
-                    accession_number=_accession_from_url(filing_url),
-                    form_type=form_type,
-                    filing_date=filing_date,
-                    url=filing_url,
-                    company_name=company_name,
-                )
+        return [
+            filing
+            for filing in get_daily_index(start_date, end_date, client=self.sec_client)
+            if _matches_form_types(filing.form_type, self.form_types)
+            and not _before_cutoff(
+                filing.form_type, filing.filing_date, self.form_types, self.cutoffs
             )
-
-        return filings
+        ]
 
 
 class HistoricalDiscovery(Discovery):
@@ -264,23 +204,6 @@ class HistoricalDiscovery(Discovery):
         return filings
 
 
-def _find_form_type_col(lines: list[str]) -> int | None:
-    """Return the column index where 'Form Type' starts in the header, or None."""
-    for line in lines:
-        idx = line.find("Form Type")
-        if idx >= 0:
-            return idx
-    return None
-
-
-def _crawler_idx_url(date: datetime.date) -> str:
-    return _CRAWLER_IDX_URL.format(
-        year=date.year,
-        quarter=(date.month - 1) // 3 + 1,
-        date=date.strftime("%Y%m%d"),
-    )
-
-
 def _matches_form_types(form_type: str, patterns: list[str]) -> bool:
     return any(re.match(pattern, form_type) for pattern in patterns)
 
@@ -297,11 +220,3 @@ def _before_cutoff(
             cutoff = cutoffs.get(pattern)
             return cutoff is not None and filing_date < cutoff
     return False
-
-
-def _parse_yyyymmdd(s: str) -> datetime.date:
-    return datetime.date(int(s[:4]), int(s[4:6]), int(s[6:]))
-
-
-def _accession_from_url(url: str) -> str:
-    return url.rsplit("/", 1)[-1].removesuffix("-index.htm")

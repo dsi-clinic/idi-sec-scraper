@@ -5,6 +5,7 @@ import datetime
 
 # Third party imports
 import pandas as pd
+from idi_ftm2j_shared.types import ScrapedDocument, ScrapedFiling
 
 # Application imports
 from idi_sec_scraper.manifest import (
@@ -12,7 +13,6 @@ from idi_sec_scraper.manifest import (
     _filings_to_df,
     update_bucket_manifest,
 )
-from idi_sec_scraper.types import ScrapedDocument, ScrapedFiling
 
 _FILING = ScrapedFiling(
     cik="320193",

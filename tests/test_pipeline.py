@@ -4,6 +4,8 @@
 import dataclasses
 import datetime
 
+from idi_ftm2j_shared.types import DiscoveredFiling, ScrapedDocument, ScrapedFiling
+
 # Application imports
 from idi_sec_scraper.document_filters import FormTypeConfig
 from idi_sec_scraper.failures import FailureType
@@ -16,12 +18,9 @@ from idi_sec_scraper.pipeline import (
 )
 from idi_sec_scraper.types import (
     DailyPipelineConfig,
-    DiscoveredFiling,
     HistoricalPipelineConfig,
     ParsedDocument,
     ParsedFiling,
-    ScrapedDocument,
-    ScrapedFiling,
 )
 
 _FILTERS_PATH = "config/document_filters.yaml"
