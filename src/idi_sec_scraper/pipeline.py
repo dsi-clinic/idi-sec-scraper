@@ -23,17 +23,17 @@ from idi_ftm2j_shared.storage import (
     save_stream,
 )
 
-from idi_sec_scraper.processor.discovery import DailyDiscovery, Discovery, HistoricalDiscovery
-from idi_sec_scraper.processor.document_filters import (
+from idi_sec_scraper.discovery import DailyDiscovery, Discovery, HistoricalDiscovery
+from idi_sec_scraper.document_filters import (
     find_form_type_entry,
     load_document_filters,
     select_and_filter_documents,
 )
-from idi_sec_scraper.processor.failures import FailureType, SECScraperFailureClassifier
-from idi_sec_scraper.processor.manifest import ManifestWriter
-from idi_sec_scraper.processor.parser import parse_index_htm
-from idi_sec_scraper.processor.paths import filing_s3_prefix
-from idi_sec_scraper.processor.types import (
+from idi_sec_scraper.failures import FailureType, SECScraperFailureClassifier
+from idi_sec_scraper.manifest import ManifestWriter
+from idi_sec_scraper.parser import parse_index_htm
+from idi_sec_scraper.paths import filing_s3_prefix
+from idi_sec_scraper.types import (
     DiscoveredFiling,
     DocumentFilterConfig,
     PipelineConfig,

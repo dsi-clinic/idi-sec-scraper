@@ -5,16 +5,16 @@ import dataclasses
 import datetime
 
 # Application imports
-from idi_sec_scraper.processor.document_filters import FormTypeConfig
-from idi_sec_scraper.processor.failures import FailureType
-from idi_sec_scraper.processor.paths import filing_s3_prefix
-from idi_sec_scraper.processor.pipeline import (
+from idi_sec_scraper.document_filters import FormTypeConfig
+from idi_sec_scraper.failures import FailureType
+from idi_sec_scraper.paths import filing_s3_prefix
+from idi_sec_scraper.pipeline import (
     DailySECScraperPipeline,
     HistoricalSECScraperPipeline,
     _new_scraped_filing,
     _scraped_filing_from_dict,
 )
-from idi_sec_scraper.processor.types import (
+from idi_sec_scraper.types import (
     DailyPipelineConfig,
     DiscoveredFiling,
     HistoricalPipelineConfig,
@@ -48,10 +48,10 @@ _FILING = DiscoveredFiling(
 def _make_pipeline(mocker, cls, config):
     """Instantiate a pipeline with a mocked document filter load and manifest writer."""
     mocker.patch(
-        "idi_sec_scraper.processor.pipeline.load_document_filters",
+        "idi_sec_scraper.pipeline.load_document_filters",
         return_value=mocker.MagicMock(form_types={}),
     )
-    mocker.patch("idi_sec_scraper.processor.pipeline.ManifestWriter")
+    mocker.patch("idi_sec_scraper.pipeline.ManifestWriter")
     sec_client = mocker.MagicMock()
     sec_client.SEC_HEADERS = {}
     return cls(config, sec_client)
@@ -222,7 +222,7 @@ class TestHistoricalLoadInput:
     """Tests for HistoricalSECScraperPipeline.load_input()."""
 
     def test_calls_discover_historical_with_match_patterns(self, mocker):
-        from idi_sec_scraper.processor.document_filters import DocumentFilterConfig, FormTypeConfig
+        from idi_sec_scraper.document_filters import DocumentFilterConfig, FormTypeConfig
 
         filter_config = DocumentFilterConfig(
             form_types={
@@ -231,10 +231,10 @@ class TestHistoricalLoadInput:
             }
         )
         mocker.patch(
-            "idi_sec_scraper.processor.pipeline.load_document_filters",
+            "idi_sec_scraper.pipeline.load_document_filters",
             return_value=filter_config,
         )
-        mock_cls = mocker.patch("idi_sec_scraper.processor.pipeline.HistoricalDiscovery")
+        mock_cls = mocker.patch("idi_sec_scraper.pipeline.HistoricalDiscovery")
         mock_cls.return_value.discover.return_value = []
         sec_client = mocker.MagicMock()
         sec_client.SEC_HEADERS = {}
@@ -256,12 +256,12 @@ class TestHistoricalLoadInput:
 
     def test_https_url_streams_to_s3_then_discovers_from_s3(self, mocker):
         mocker.patch(
-            "idi_sec_scraper.processor.pipeline.load_document_filters",
+            "idi_sec_scraper.pipeline.load_document_filters",
             return_value=mocker.MagicMock(form_types={}),
         )
-        mock_cls = mocker.patch("idi_sec_scraper.processor.pipeline.HistoricalDiscovery")
+        mock_cls = mocker.patch("idi_sec_scraper.pipeline.HistoricalDiscovery")
         mock_cls.return_value.discover.return_value = []
-        mock_stream = mocker.patch("idi_sec_scraper.processor.pipeline.save_stream")
+        mock_stream = mocker.patch("idi_sec_scraper.pipeline.save_stream")
         sec_client = mocker.MagicMock()
         sec_client.SEC_HEADERS = {"User-Agent": "test"}
         https_url = "https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
@@ -286,12 +286,12 @@ class TestHistoricalLoadInput:
 
     def test_s3_url_skips_download(self, mocker):
         mocker.patch(
-            "idi_sec_scraper.processor.pipeline.load_document_filters",
+            "idi_sec_scraper.pipeline.load_document_filters",
             return_value=mocker.MagicMock(form_types={}),
         )
-        mock_cls = mocker.patch("idi_sec_scraper.processor.pipeline.HistoricalDiscovery")
+        mock_cls = mocker.patch("idi_sec_scraper.pipeline.HistoricalDiscovery")
         mock_cls.return_value.discover.return_value = []
-        mock_stream = mocker.patch("idi_sec_scraper.processor.pipeline.save_stream")
+        mock_stream = mocker.patch("idi_sec_scraper.pipeline.save_stream")
         sec_client = mocker.MagicMock()
         sec_client.SEC_HEADERS = {}
         config = HistoricalPipelineConfig(
@@ -307,14 +307,14 @@ class TestHistoricalLoadInput:
         mock_cls.return_value.discover.assert_called_once_with("s3://bucket/submissions.zip", None)
 
     def test_discovery_held_as_attribute(self, mocker):
-        from idi_sec_scraper.processor.document_filters import DocumentFilterConfig, FormTypeConfig
+        from idi_sec_scraper.document_filters import DocumentFilterConfig, FormTypeConfig
 
         filter_config = DocumentFilterConfig(form_types={"8-K": FormTypeConfig(match="8-K")})
         mocker.patch(
-            "idi_sec_scraper.processor.pipeline.load_document_filters",
+            "idi_sec_scraper.pipeline.load_document_filters",
             return_value=filter_config,
         )
-        mock_cls = mocker.patch("idi_sec_scraper.processor.pipeline.HistoricalDiscovery")
+        mock_cls = mocker.patch("idi_sec_scraper.pipeline.HistoricalDiscovery")
         mock_cls.return_value.discover.return_value = []
         sec_client = mocker.MagicMock()
         sec_client.SEC_HEADERS = {}
@@ -331,14 +331,14 @@ class TestDailyLoadInput:
     """Tests for DailySECScraperPipeline.load_input()."""
 
     def test_calls_discover_daily_with_date_range_and_patterns(self, mocker):
-        from idi_sec_scraper.processor.document_filters import DocumentFilterConfig, FormTypeConfig
+        from idi_sec_scraper.document_filters import DocumentFilterConfig, FormTypeConfig
 
         filter_config = DocumentFilterConfig(form_types={"8-K": FormTypeConfig(match="8-K")})
         mocker.patch(
-            "idi_sec_scraper.processor.pipeline.load_document_filters",
+            "idi_sec_scraper.pipeline.load_document_filters",
             return_value=filter_config,
         )
-        mock_cls = mocker.patch("idi_sec_scraper.processor.pipeline.DailyDiscovery")
+        mock_cls = mocker.patch("idi_sec_scraper.pipeline.DailyDiscovery")
         mock_cls.return_value.discover.return_value = []
         sec_client = mocker.MagicMock()
         sec_client.SEC_HEADERS = {}
@@ -357,14 +357,14 @@ class TestDailyLoadInput:
         )
 
     def test_discovery_held_as_attribute(self, mocker):
-        from idi_sec_scraper.processor.document_filters import DocumentFilterConfig, FormTypeConfig
+        from idi_sec_scraper.document_filters import DocumentFilterConfig, FormTypeConfig
 
         filter_config = DocumentFilterConfig(form_types={"8-K": FormTypeConfig(match="8-K")})
         mocker.patch(
-            "idi_sec_scraper.processor.pipeline.load_document_filters",
+            "idi_sec_scraper.pipeline.load_document_filters",
             return_value=filter_config,
         )
-        mock_cls = mocker.patch("idi_sec_scraper.processor.pipeline.DailyDiscovery")
+        mock_cls = mocker.patch("idi_sec_scraper.pipeline.DailyDiscovery")
         mock_cls.return_value.discover.return_value = []
         sec_client = mocker.MagicMock()
         sec_client.SEC_HEADERS = {}
@@ -408,17 +408,17 @@ def _patch_scrape_deps(mocker, *, index_html=b"<html/>", docs=None, cached=False
     if docs is None:
         docs = []
 
-    mocker.patch("idi_sec_scraper.processor.pipeline.key_exists", return_value=cached)
-    mocker.patch("idi_sec_scraper.processor.pipeline.load_content", return_value=index_html)
-    mocker.patch("idi_sec_scraper.processor.pipeline.load_json", return_value=_MANIFEST_DICT)
-    mocker.patch("idi_sec_scraper.processor.pipeline.save_content")
-    mocker.patch("idi_sec_scraper.processor.pipeline.save_json")
+    mocker.patch("idi_sec_scraper.pipeline.key_exists", return_value=cached)
+    mocker.patch("idi_sec_scraper.pipeline.load_content", return_value=index_html)
+    mocker.patch("idi_sec_scraper.pipeline.load_json", return_value=_MANIFEST_DICT)
+    mocker.patch("idi_sec_scraper.pipeline.save_content")
+    mocker.patch("idi_sec_scraper.pipeline.save_json")
     mocker.patch(
-        "idi_sec_scraper.processor.pipeline.parse_index_htm",
+        "idi_sec_scraper.pipeline.parse_index_htm",
         return_value=(_make_parsed_filing(docs), None),
     )
     mocker.patch(
-        "idi_sec_scraper.processor.pipeline.select_and_filter_documents",
+        "idi_sec_scraper.pipeline.select_and_filter_documents",
         return_value=("8-K", docs),
     )
 
@@ -464,7 +464,7 @@ class TestScrapeFiling:
     def test_unexpected_exception_returns_none(self, mocker):
         _patch_scrape_deps(mocker, docs=[_DOC])
         mocker.patch(
-            "idi_sec_scraper.processor.pipeline.save_json",
+            "idi_sec_scraper.pipeline.save_json",
             side_effect=RuntimeError("S3 write failed"),
         )
         pipeline = _make_pipeline(
@@ -484,7 +484,7 @@ class TestScrapeFiling:
     def test_unexpected_exception_does_not_register_failure(self, mocker):
         _patch_scrape_deps(mocker, docs=[_DOC])
         mocker.patch(
-            "idi_sec_scraper.processor.pipeline.save_json",
+            "idi_sec_scraper.pipeline.save_json",
             side_effect=RuntimeError("S3 write failed"),
         )
         pipeline = _make_pipeline(
@@ -505,7 +505,7 @@ class TestScrapeFiling:
     def test_unexpected_exception_is_logged(self, mocker):
         _patch_scrape_deps(mocker, docs=[_DOC])
         mocker.patch(
-            "idi_sec_scraper.processor.pipeline.save_json",
+            "idi_sec_scraper.pipeline.save_json",
             side_effect=RuntimeError("S3 write failed"),
         )
         pipeline = _make_pipeline(
@@ -530,7 +530,7 @@ class TestScrapeFiling:
 
     def test_index_written_to_s3_on_daily_run(self, mocker):
         _patch_scrape_deps(mocker, docs=[_DOC])
-        mock_save = mocker.patch("idi_sec_scraper.processor.pipeline.save_content")
+        mock_save = mocker.patch("idi_sec_scraper.pipeline.save_content")
         pipeline = _make_pipeline(
             mocker,
             DailySECScraperPipeline,
@@ -547,7 +547,7 @@ class TestScrapeFiling:
 
     def test_manifest_written_to_s3(self, mocker):
         _patch_scrape_deps(mocker, docs=[_DOC])
-        mock_save_json = mocker.patch("idi_sec_scraper.processor.pipeline.save_json")
+        mock_save_json = mocker.patch("idi_sec_scraper.pipeline.save_json")
         pipeline = _make_pipeline(
             mocker,
             DailySECScraperPipeline,
@@ -566,10 +566,10 @@ class TestScrapeFiling:
     def test_report_date_written_to_manifest(self, mocker):
         _patch_scrape_deps(mocker, docs=[_DOC])
         mocker.patch(
-            "idi_sec_scraper.processor.pipeline.parse_index_htm",
+            "idi_sec_scraper.pipeline.parse_index_htm",
             return_value=(_make_parsed_filing([_DOC]), None),
         )
-        mock_save_json = mocker.patch("idi_sec_scraper.processor.pipeline.save_json")
+        mock_save_json = mocker.patch("idi_sec_scraper.pipeline.save_json")
         pipeline = _make_pipeline(
             mocker,
             DailySECScraperPipeline,
@@ -589,10 +589,10 @@ class TestScrapeFiling:
         parsed.report_date = None
         _patch_scrape_deps(mocker, docs=[_DOC])
         mocker.patch(
-            "idi_sec_scraper.processor.pipeline.parse_index_htm",
+            "idi_sec_scraper.pipeline.parse_index_htm",
             return_value=(parsed, None),
         )
-        mock_save_json = mocker.patch("idi_sec_scraper.processor.pipeline.save_json")
+        mock_save_json = mocker.patch("idi_sec_scraper.pipeline.save_json")
         pipeline = _make_pipeline(
             mocker,
             DailySECScraperPipeline,
@@ -616,7 +616,7 @@ class TestScrapeFiling:
             url="https://www.sec.gov/Archives/edgar/data/320193/000114036126006577/report.htm",
         )
         _patch_scrape_deps(mocker, docs=[doc])
-        mock_save = mocker.patch("idi_sec_scraper.processor.pipeline.save_content")
+        mock_save = mocker.patch("idi_sec_scraper.pipeline.save_content")
         pipeline = _make_pipeline(
             mocker,
             DailySECScraperPipeline,
@@ -657,7 +657,7 @@ class TestScrapeFiling:
             ],
         }
         _patch_scrape_deps(mocker, docs=[doc], cached=True)
-        mocker.patch("idi_sec_scraper.processor.pipeline.load_json", return_value=existing_manifest)
+        mocker.patch("idi_sec_scraper.pipeline.load_json", return_value=existing_manifest)
         pipeline = _make_pipeline(
             mocker,
             HistoricalSECScraperPipeline,
@@ -675,7 +675,7 @@ class TestScrapeFiling:
     def test_reads_from_s3_when_manifest_cached_historical(self, mocker):
         _patch_scrape_deps(mocker, cached=True)
         mock_load_content = mocker.patch(
-            "idi_sec_scraper.processor.pipeline.load_content", return_value=b"<html/>"
+            "idi_sec_scraper.pipeline.load_content", return_value=b"<html/>"
         )
         pipeline = _make_pipeline(
             mocker,
@@ -694,7 +694,7 @@ class TestScrapeFiling:
     def test_reads_from_s3_when_manifest_cached_daily(self, mocker):
         _patch_scrape_deps(mocker, cached=True)
         mock_load_content = mocker.patch(
-            "idi_sec_scraper.processor.pipeline.load_content", return_value=b"<html/>"
+            "idi_sec_scraper.pipeline.load_content", return_value=b"<html/>"
         )
         pipeline = _make_pipeline(
             mocker,
@@ -856,7 +856,7 @@ class TestScrapeFiling:
     def test_form_not_configured_registers_failure_and_returns_none(self, mocker):
         _patch_scrape_deps(mocker, docs=[_DOC])
         mocker.patch(
-            "idi_sec_scraper.processor.pipeline.select_and_filter_documents",
+            "idi_sec_scraper.pipeline.select_and_filter_documents",
             return_value=(None, []),
         )
         pipeline = _make_pipeline(
@@ -883,7 +883,7 @@ class TestScrapingWithParseValidationFailure:
     def test_parse_failure_registers_failure_and_returns_none(self, mocker):
         _patch_scrape_deps(mocker)
         mocker.patch(
-            "idi_sec_scraper.processor.pipeline.parse_index_htm",
+            "idi_sec_scraper.pipeline.parse_index_htm",
             return_value=(_make_parsed_filing([]), FailureType.CIK_MISMATCH),
         )
         pipeline = _make_pipeline(
@@ -905,10 +905,10 @@ class TestScrapingWithParseValidationFailure:
     def test_parse_failure_writes_manifest_with_failure_reason(self, mocker):
         _patch_scrape_deps(mocker)
         mocker.patch(
-            "idi_sec_scraper.processor.pipeline.parse_index_htm",
+            "idi_sec_scraper.pipeline.parse_index_htm",
             return_value=(_make_parsed_filing([]), FailureType.CIK_MISMATCH),
         )
-        mock_save_json = mocker.patch("idi_sec_scraper.processor.pipeline.save_json")
+        mock_save_json = mocker.patch("idi_sec_scraper.pipeline.save_json")
         pipeline = _make_pipeline(
             mocker,
             DailySECScraperPipeline,
@@ -927,7 +927,7 @@ class TestScrapingWithParseValidationFailure:
 
     def test_documents_missing_writes_manifest_with_failure_reason(self, mocker):
         _patch_scrape_deps(mocker, docs=[])
-        mock_save_json = mocker.patch("idi_sec_scraper.processor.pipeline.save_json")
+        mock_save_json = mocker.patch("idi_sec_scraper.pipeline.save_json")
         pipeline = _make_pipeline(
             mocker,
             DailySECScraperPipeline,
@@ -993,13 +993,13 @@ class TestProcess:
         assert pipeline.stats.total_filings == 1
 
     def test_successful_filing_counted(self, mocker):
-        from idi_sec_scraper.processor.document_filters import DocumentFilterConfig
+        from idi_sec_scraper.document_filters import DocumentFilterConfig
 
         mocker.patch(
-            "idi_sec_scraper.processor.pipeline.load_document_filters",
+            "idi_sec_scraper.pipeline.load_document_filters",
             return_value=DocumentFilterConfig(form_types={"8-K": FormTypeConfig(match="8-K")}),
         )
-        mocker.patch("idi_sec_scraper.processor.pipeline.ManifestWriter")
+        mocker.patch("idi_sec_scraper.pipeline.ManifestWriter")
         _patch_scrape_deps(mocker, docs=[_DOC])
         sec_client = mocker.MagicMock()
         sec_client.SEC_HEADERS = {}
@@ -1018,13 +1018,13 @@ class TestProcess:
         assert pipeline.stats.form_type_documents_total["8-K"] == 1
 
     def test_failed_filing_counted(self, mocker):
-        from idi_sec_scraper.processor.document_filters import DocumentFilterConfig
+        from idi_sec_scraper.document_filters import DocumentFilterConfig
 
         mocker.patch(
-            "idi_sec_scraper.processor.pipeline.load_document_filters",
+            "idi_sec_scraper.pipeline.load_document_filters",
             return_value=DocumentFilterConfig(form_types={"8-K": FormTypeConfig(match="8-K")}),
         )
-        mocker.patch("idi_sec_scraper.processor.pipeline.ManifestWriter")
+        mocker.patch("idi_sec_scraper.pipeline.ManifestWriter")
         _patch_scrape_deps(mocker)
         sec_client = mocker.MagicMock()
         sec_client.SEC_HEADERS = {}
@@ -1063,7 +1063,7 @@ class TestProcess:
             ],
         }
         _patch_scrape_deps(mocker, docs=[_DOC], cached=True)
-        mocker.patch("idi_sec_scraper.processor.pipeline.load_json", return_value=existing_manifest)
+        mocker.patch("idi_sec_scraper.pipeline.load_json", return_value=existing_manifest)
         pipeline = _make_pipeline(
             mocker,
             HistoricalSECScraperPipeline,
@@ -1095,7 +1095,7 @@ class TestProcess:
             "documents": [],  # no existing docs → report.htm will be newly fetched
         }
         _patch_scrape_deps(mocker, docs=[_DOC], cached=True)
-        mocker.patch("idi_sec_scraper.processor.pipeline.load_json", return_value=existing_manifest)
+        mocker.patch("idi_sec_scraper.pipeline.load_json", return_value=existing_manifest)
         pipeline = _make_pipeline(
             mocker,
             HistoricalSECScraperPipeline,

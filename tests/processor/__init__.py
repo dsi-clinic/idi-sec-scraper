@@ -1,1 +1,0 @@
-"""SEC scraper processor tests."""

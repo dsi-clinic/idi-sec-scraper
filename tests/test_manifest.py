@@ -7,12 +7,12 @@ import datetime
 import pandas as pd
 
 # Application imports
-from idi_sec_scraper.processor.manifest import (
+from idi_sec_scraper.manifest import (
     ManifestWriter,
     _filings_to_df,
     update_bucket_manifest,
 )
-from idi_sec_scraper.processor.types import ScrapedDocument, ScrapedFiling
+from idi_sec_scraper.types import ScrapedDocument, ScrapedFiling
 
 _FILING = ScrapedFiling(
     cik="320193",
@@ -125,14 +125,14 @@ class TestUpdateBucketManifest:
     """Tests for update_bucket_manifest()."""
 
     def test_noop_when_all_filings_have_no_documents(self, mocker):
-        read_mock = mocker.patch("idi_sec_scraper.processor.manifest.pd.read_parquet")
+        read_mock = mocker.patch("idi_sec_scraper.manifest.pd.read_parquet")
         write_mock = mocker.patch("pandas.DataFrame.to_parquet")
         update_bucket_manifest("test-bucket", [_FILING_NO_DOCS])
         read_mock.assert_not_called()
         write_mock.assert_not_called()
 
     def test_noop_when_filings_list_is_empty(self, mocker):
-        read_mock = mocker.patch("idi_sec_scraper.processor.manifest.pd.read_parquet")
+        read_mock = mocker.patch("idi_sec_scraper.manifest.pd.read_parquet")
         write_mock = mocker.patch("pandas.DataFrame.to_parquet")
         update_bucket_manifest("test-bucket", [])
         read_mock.assert_not_called()
@@ -140,7 +140,7 @@ class TestUpdateBucketManifest:
 
     def test_creates_new_manifest_when_none_exists(self, mocker):
         mocker.patch(
-            "idi_sec_scraper.processor.manifest.pd.read_parquet",
+            "idi_sec_scraper.manifest.pd.read_parquet",
             side_effect=FileNotFoundError,
         )
         written: list[pd.DataFrame] = []
@@ -175,7 +175,7 @@ class TestUpdateBucketManifest:
                 }
             ]
         )
-        mocker.patch("idi_sec_scraper.processor.manifest.pd.read_parquet", return_value=existing)
+        mocker.patch("idi_sec_scraper.manifest.pd.read_parquet", return_value=existing)
         written: list[pd.DataFrame] = []
 
         def capture_write(self_df: pd.DataFrame, _path: str, **_kwargs: object) -> None:
@@ -204,7 +204,7 @@ class TestUpdateBucketManifest:
                 }
             ]
         )
-        mocker.patch("idi_sec_scraper.processor.manifest.pd.read_parquet", return_value=existing)
+        mocker.patch("idi_sec_scraper.manifest.pd.read_parquet", return_value=existing)
         written: list[pd.DataFrame] = []
 
         def capture_write(self_df: pd.DataFrame, path: str, **kwargs: object) -> None:
@@ -224,7 +224,7 @@ class TestUpdateBucketManifest:
 
     def test_writes_to_correct_s3_path(self, mocker):
         mocker.patch(
-            "idi_sec_scraper.processor.manifest.pd.read_parquet",
+            "idi_sec_scraper.manifest.pd.read_parquet",
             side_effect=FileNotFoundError,
         )
         paths: list[str] = []
@@ -243,7 +243,7 @@ class TestManifestWriter:
 
     def _patch_manifest(self, mocker):
         mocker.patch(
-            "idi_sec_scraper.processor.manifest.pd.read_parquet",
+            "idi_sec_scraper.manifest.pd.read_parquet",
             side_effect=FileNotFoundError,
         )
         written: list[list] = []

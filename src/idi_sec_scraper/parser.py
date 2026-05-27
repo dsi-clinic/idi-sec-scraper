@@ -8,8 +8,8 @@ import re
 from bs4 import BeautifulSoup
 
 # Application imports
-from idi_sec_scraper.processor.failures import FailureType
-from idi_sec_scraper.processor.types import DiscoveredFiling, ParsedDocument, ParsedFiling
+from idi_sec_scraper.failures import FailureType
+from idi_sec_scraper.types import DiscoveredFiling, ParsedDocument, ParsedFiling
 
 _SEC_BASE_URL = "https://www.sec.gov"
 _IXBRL_PREFIX = "/ix?doc="

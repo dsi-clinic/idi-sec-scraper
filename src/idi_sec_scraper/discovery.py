@@ -16,8 +16,8 @@ from idi_ftm2j_shared.failures import FailureRegistry
 from idi_ftm2j_shared.logs import get_logger
 from idi_ftm2j_shared.storage import open_zip
 
-from idi_sec_scraper.processor.failures import FailureType
-from idi_sec_scraper.processor.types import DiscoveredFiling
+from idi_sec_scraper.failures import FailureType
+from idi_sec_scraper.types import DiscoveredFiling
 
 _logger = get_logger("discovery")
 

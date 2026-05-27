@@ -7,16 +7,16 @@ import datetime
 import pytest
 
 # Application imports
-from idi_sec_scraper.processor.orchestrator import main
+from idi_sec_scraper.orchestrator import main
 
 
 def _run(mocker, argv: list[str]):
     """Invoke main() with the given argv, mocking pipeline construction and run."""
     mocker.patch("sys.argv", ["sec-scraper"] + argv)
-    mocker.patch("idi_sec_scraper.processor.orchestrator.SecClient")
-    mock_hist = mocker.patch("idi_sec_scraper.processor.orchestrator.HistoricalSECScraperPipeline")
+    mocker.patch("idi_sec_scraper.orchestrator.SecClient")
+    mock_hist = mocker.patch("idi_sec_scraper.orchestrator.HistoricalSECScraperPipeline")
     mock_hist.return_value.run.return_value = None
-    mock_daily = mocker.patch("idi_sec_scraper.processor.orchestrator.DailySECScraperPipeline")
+    mock_daily = mocker.patch("idi_sec_scraper.orchestrator.DailySECScraperPipeline")
     mock_daily.return_value.run.return_value = None
     main()
     return mock_hist, mock_daily
@@ -120,7 +120,7 @@ class TestDailyMode:
 
     def test_dates_default_to_yesterday(self, mocker):
         fake_today = datetime.date(2026, 4, 2)
-        mock_dt = mocker.patch("idi_sec_scraper.processor.orchestrator.datetime")
+        mock_dt = mocker.patch("idi_sec_scraper.orchestrator.datetime")
         mock_dt.date.today.return_value = fake_today
         mock_dt.date.fromisoformat = datetime.date.fromisoformat
         mock_dt.timedelta = datetime.timedelta

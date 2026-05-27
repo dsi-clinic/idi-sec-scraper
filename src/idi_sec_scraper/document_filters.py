@@ -9,7 +9,7 @@ from pathlib import Path
 import yaml
 
 # Application imports
-from idi_sec_scraper.processor.types import (
+from idi_sec_scraper.types import (
     DocumentFilterConfig,
     FilterCondition,
     FormTypeConfig,

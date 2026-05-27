@@ -27,7 +27,7 @@ dependencies = [
 ]
 
 [project.scripts]
-sec-scraper = "idi_sec_scraper.processor.orchestrator:main"
+sec-scraper = "idi_sec_scraper.orchestrator:main"
 
 [project.optional-dependencies]
 dev = [

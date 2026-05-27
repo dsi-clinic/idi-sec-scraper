@@ -7,7 +7,7 @@ everything at once.
 
 import re
 
-from idi_sec_scraper.processor.types import DiscoveredFiling
+from idi_sec_scraper.types import DiscoveredFiling
 
 _ROOT = "sec"
 

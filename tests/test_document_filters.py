@@ -8,14 +8,14 @@ import textwrap
 import pytest
 
 # Application imports
-from idi_sec_scraper.processor.document_filters import (
+from idi_sec_scraper.document_filters import (
     DocumentFilterConfig,
     FilterCondition,
     FormTypeConfig,
     load_document_filters,
     select_and_filter_documents,
 )
-from idi_sec_scraper.processor.types import ParsedDocument
+from idi_sec_scraper.types import ParsedDocument
 
 
 def _doc(*, seq="1", description="", filename="doc.htm", type="", url="https://example.com"):
