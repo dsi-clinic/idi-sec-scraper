@@ -20,7 +20,7 @@ from idi_ftm2j_shared.types import DiscoveredFiling
 
 from idi_sec_scraper.failures import FailureType
 
-_logger = get_logger("discovery")
+_logger = get_logger(__name__)
 
 
 class Discovery(ABC):
