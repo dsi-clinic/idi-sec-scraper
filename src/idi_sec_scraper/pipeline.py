@@ -13,7 +13,7 @@ from idi_ftm2j_shared.api import SecClient
 # Third party imports
 from idi_ftm2j_shared.failures import FailureRegistry
 from idi_ftm2j_shared.logs import get_logger
-from idi_ftm2j_shared.sec import get_filing
+from idi_ftm2j_shared.sec import _S3_ROOT, get_filing
 from idi_ftm2j_shared.storage import (
     key_exists,
     load_content,
@@ -451,7 +451,7 @@ class HistoricalSECScraperPipeline(SECScraperPipeline):
         submissions_url = self.config.submissions_url
         # If the submissions.zip is not in s3 already, download it to s3 first
         if submissions_url.startswith("https://"):
-            s3_url = f"s3://{self.config.bucket}/sec/submissions.zip"
+            s3_url = f"s3://{self.config.bucket}/{_S3_ROOT}/submissions.zip"
             self.logger.info("Downloading submissions.zip from SEC to %s", s3_url)
             response = self.sec_client.session.get(
                 submissions_url, headers=self.sec_client.SEC_HEADERS, stream=True
