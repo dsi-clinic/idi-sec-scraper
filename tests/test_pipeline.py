@@ -14,7 +14,6 @@ from idi_sec_scraper.pipeline import (
     DailySECScraperPipeline,
     HistoricalSECScraperPipeline,
     _new_scraped_filing,
-    _scraped_filing_from_dict,
 )
 from idi_sec_scraper.types import (
     DailyPipelineConfig,
@@ -108,108 +107,6 @@ class TestNewScrapedFiling:
     def test_failure_reason_defaults_to_empty(self):
         result = _new_scraped_filing(_FILING)
         assert result.failure_reason == ""
-
-
-class TestScrapedFilingFromDict:
-    """Tests for _scraped_filing_from_dict()."""
-
-    def test_round_trips_via_dataclasses_asdict(self):
-        original = ScrapedFiling(
-            cik="320193",
-            accession_number="0001140361-26-006577",
-            form_type="8-K",
-            filing_date="2026-02-24",
-            last_scraped_at="2026-02-24T12:00:00+00:00",
-            index_url="https://www.sec.gov/Archives/edgar/data/320193/000114036126006577/0001140361-26-006577-index.htm",
-            company_name="Apple Inc.",
-            documents=[
-                ScrapedDocument(
-                    seq="1",
-                    description="8-K",
-                    filename="doc.htm",
-                    type="8-K",
-                    s3_key="s3://bucket/doc.htm",
-                    url="https://sec.gov/doc.htm",
-                )
-            ],
-        )
-        result = _scraped_filing_from_dict(dataclasses.asdict(original))
-        assert result == original
-
-    def test_missing_documents_defaults_to_empty(self):
-        data = {
-            "cik": "1",
-            "accession_number": "0000000001-26-000001",
-            "form_type": "8-K",
-            "filing_date": "2026-01-01",
-            "last_scraped_at": "2026-01-01T00:00:00+00:00",
-            "index_url": "https://www.sec.gov/index.htm",
-            "company_name": "Test Co.",
-        }
-        result = _scraped_filing_from_dict(data)
-        assert result.documents == []
-
-    def test_legacy_manifest_without_index_url_and_company_name(self):
-        data = {
-            "cik": "1",
-            "accession_number": "0000000001-26-000001",
-            "form_type": "8-K",
-            "filing_date": "2026-01-01",
-            "last_scraped_at": "2026-01-01T00:00:00+00:00",
-        }
-        result = _scraped_filing_from_dict(data)
-        assert result.index_url == ""
-        assert result.company_name == ""
-
-    def test_failure_reason_defaults_to_empty_string(self):
-        data = {
-            "cik": "1",
-            "accession_number": "0000000001-26-000001",
-            "form_type": "8-K",
-            "filing_date": "2026-01-01",
-            "last_scraped_at": "2026-01-01T00:00:00+00:00",
-        }
-        result = _scraped_filing_from_dict(data)
-        assert result.failure_reason == ""
-
-    def test_failure_reason_round_trips(self):
-        original = ScrapedFiling(
-            cik="1",
-            accession_number="0000000001-26-000001",
-            form_type="8-K",
-            filing_date="2026-01-01",
-            last_scraped_at="2026-01-01T00:00:00+00:00",
-            index_url="",
-            company_name="",
-            failure_reason="cik_mismatch",
-        )
-        result = _scraped_filing_from_dict(dataclasses.asdict(original))
-        assert result.failure_reason == "cik_mismatch"
-
-    def test_report_date_defaults_to_empty_string(self):
-        data = {
-            "cik": "1",
-            "accession_number": "0000000001-26-000001",
-            "form_type": "8-K",
-            "filing_date": "2026-01-01",
-            "last_scraped_at": "2026-01-01T00:00:00+00:00",
-        }
-        result = _scraped_filing_from_dict(data)
-        assert result.report_date == ""
-
-    def test_report_date_round_trips(self):
-        original = ScrapedFiling(
-            cik="1",
-            accession_number="0000000001-26-000001",
-            form_type="8-K",
-            filing_date="2026-01-01",
-            last_scraped_at="2026-01-01T00:00:00+00:00",
-            index_url="",
-            company_name="",
-            report_date="2026-01-15",
-        )
-        result = _scraped_filing_from_dict(dataclasses.asdict(original))
-        assert result.report_date == "2026-01-15"
 
 
 # ---------------------------------------------------------------------------
@@ -390,16 +287,16 @@ def _make_parsed_filing(docs: list[ParsedDocument]) -> ParsedFiling:
     )
 
 
-_MANIFEST_DICT = {
-    "cik": _FILING.cik,
-    "accession_number": _FILING.accession_number,
-    "form_type": _FILING.form_type,
-    "filing_date": str(_FILING.filing_date),
-    "last_scraped_at": "2026-02-24T00:00:00+00:00",
-    "index_url": _FILING.url,
-    "company_name": _FILING.company_name,
-    "documents": [],
-}
+_DEFAULT_SCRAPED_FILING = ScrapedFiling(
+    cik=_FILING.cik,
+    accession_number=_FILING.accession_number,
+    form_type=_FILING.form_type,
+    filing_date=str(_FILING.filing_date),
+    last_scraped_at="2026-02-24T00:00:00+00:00",
+    index_url=_FILING.url,
+    company_name=_FILING.company_name,
+    documents=[],
+)
 
 
 def _patch_scrape_deps(mocker, *, index_html=b"<html/>", docs=None, cached=False):
@@ -409,7 +306,8 @@ def _patch_scrape_deps(mocker, *, index_html=b"<html/>", docs=None, cached=False
 
     mocker.patch("idi_sec_scraper.pipeline.key_exists", return_value=cached)
     mocker.patch("idi_sec_scraper.pipeline.load_content", return_value=index_html)
-    mocker.patch("idi_sec_scraper.pipeline.load_json", return_value=_MANIFEST_DICT)
+    if cached:
+        mocker.patch("idi_sec_scraper.pipeline.get_filing", return_value=_DEFAULT_SCRAPED_FILING)
     mocker.patch("idi_sec_scraper.pipeline.save_content")
     mocker.patch("idi_sec_scraper.pipeline.save_json")
     mocker.patch(
@@ -638,25 +536,29 @@ class TestScrapeFiling:
             type="8-K",
             url="https://www.sec.gov/Archives/edgar/data/320193/000114036126006577/report.htm",
         )
-        existing_manifest = {
-            "cik": "320193",
-            "accession_number": "0001140361-26-006577",
-            "form_type": "8-K",
-            "filing_date": "2026-02-24",
-            "last_scraped_at": "2026-02-24T00:00:00+00:00",
-            "documents": [
-                {
-                    "seq": "1",
-                    "description": "8-K",
-                    "filename": "report.htm",
-                    "type": "8-K",
-                    "s3_key": "s3://bucket/report.htm",
-                    "url": "https://www.sec.gov/Archives/edgar/data/320193/000114036126006577/report.htm",
-                }
-            ],
-        }
         _patch_scrape_deps(mocker, docs=[doc], cached=True)
-        mocker.patch("idi_sec_scraper.pipeline.load_json", return_value=existing_manifest)
+        mocker.patch(
+            "idi_sec_scraper.pipeline.get_filing",
+            return_value=ScrapedFiling(
+                cik=_FILING.cik,
+                accession_number=_FILING.accession_number,
+                form_type=_FILING.form_type,
+                filing_date=str(_FILING.filing_date),
+                last_scraped_at="2026-02-24T00:00:00+00:00",
+                index_url=_FILING.url,
+                company_name=_FILING.company_name,
+                documents=[
+                    ScrapedDocument(
+                        seq="1",
+                        description="8-K",
+                        filename="report.htm",
+                        type="8-K",
+                        s3_key="s3://bucket/report.htm",
+                        url="https://www.sec.gov/Archives/edgar/data/320193/000114036126006577/report.htm",
+                    )
+                ],
+            ),
+        )
         pipeline = _make_pipeline(
             mocker,
             HistoricalSECScraperPipeline,
@@ -1042,27 +944,29 @@ class TestProcess:
         assert pipeline.stats.form_type_filings_total["8-K"] == 1
 
     def test_fully_cached_filing_counted_as_skipped_not_scraped(self, mocker):
-        existing_manifest = {
-            "cik": "320193",
-            "accession_number": "0001140361-26-006577",
-            "form_type": "8-K",
-            "filing_date": "2026-02-24",
-            "last_scraped_at": "2026-02-24T00:00:00+00:00",
-            "index_url": _FILING.url,
-            "company_name": "Apple Inc.",
-            "documents": [
-                {
-                    "seq": "1",
-                    "description": "8-K",
-                    "filename": "report.htm",
-                    "type": "8-K",
-                    "s3_key": "s3://bucket/report.htm",
-                    "url": _DOC.url,
-                }
-            ],
-        }
         _patch_scrape_deps(mocker, docs=[_DOC], cached=True)
-        mocker.patch("idi_sec_scraper.pipeline.load_json", return_value=existing_manifest)
+        mocker.patch(
+            "idi_sec_scraper.pipeline.get_filing",
+            return_value=ScrapedFiling(
+                cik=_FILING.cik,
+                accession_number=_FILING.accession_number,
+                form_type=_FILING.form_type,
+                filing_date=str(_FILING.filing_date),
+                last_scraped_at="2026-02-24T00:00:00+00:00",
+                index_url=_FILING.url,
+                company_name=_FILING.company_name,
+                documents=[
+                    ScrapedDocument(
+                        seq="1",
+                        description="8-K",
+                        filename="report.htm",
+                        type="8-K",
+                        s3_key="s3://bucket/report.htm",
+                        url=_DOC.url,
+                    )
+                ],
+            ),
+        )
         pipeline = _make_pipeline(
             mocker,
             HistoricalSECScraperPipeline,
@@ -1083,18 +987,7 @@ class TestProcess:
 
     def test_partially_cached_filing_counted_as_scraped(self, mocker):
         """Index cached but one new document → not fully cached, counts as scraped."""
-        existing_manifest = {
-            "cik": "320193",
-            "accession_number": "0001140361-26-006577",
-            "form_type": "8-K",
-            "filing_date": "2026-02-24",
-            "last_scraped_at": "2026-02-24T00:00:00+00:00",
-            "index_url": _FILING.url,
-            "company_name": "Apple Inc.",
-            "documents": [],  # no existing docs → report.htm will be newly fetched
-        }
         _patch_scrape_deps(mocker, docs=[_DOC], cached=True)
-        mocker.patch("idi_sec_scraper.pipeline.load_json", return_value=existing_manifest)
         pipeline = _make_pipeline(
             mocker,
             HistoricalSECScraperPipeline,
