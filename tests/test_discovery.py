@@ -10,18 +10,23 @@ import zipfile
 from idi_ftm2j_shared.failures import FailureRegistry
 
 # Application imports
-from idi_sec_scraper.processor.discovery import (
+from idi_ftm2j_shared.sec import (
+    _accession_from_url,
+    _find_form_type_col,
+    _parse_yyyymmdd,
+)
+from idi_ftm2j_shared.sec import (
+    _daily_index_url as _crawler_idx_url,
+)
+from idi_ftm2j_shared.types import DiscoveredFiling
+
+from idi_sec_scraper.discovery import (
     DailyDiscovery,
     Discovery,
     HistoricalDiscovery,
-    _accession_from_url,
     _before_cutoff,
-    _crawler_idx_url,
-    _find_form_type_col,
     _matches_form_types,
-    _parse_yyyymmdd,
 )
-from idi_sec_scraper.processor.types import DiscoveredFiling
 
 # Minimal crawler.idx fixture matching the real SEC format.
 # "Form Type" header label determines the column split point dynamically.
@@ -199,24 +204,25 @@ class TestDiscoverDaily:
 
         assert len(result) == 2
 
-    def test_missing_day_logs_warning(self, mocker):
+    def test_missing_day_logs_error(self, mocker):
         client = mocker.MagicMock()
         client.SEC_HEADERS = {}
         client.query_endpoint.return_value = {"status_code": 404, "error": "HTTP 404"}
-        mock_logger = mocker.patch("idi_sec_scraper.processor.discovery._logger")
+        mock_logger = mocker.patch("idi_ftm2j_shared.sec._logger")
         DailyDiscovery(client, ["8-K"]).discover(
             datetime.date(2026, 4, 1), datetime.date(2026, 4, 1)
         )
 
-        mock_logger.warning.assert_called_once()
+        mock_logger.error.assert_called_once()
 
-    def test_end_date_before_start_returns_empty(self, mocker):
+    def test_end_date_before_start_raises(self, mocker):
+        import pytest
+
         client = _make_sec_client(mocker)
-        result = DailyDiscovery(client, ["8-K"]).discover(
-            datetime.date(2026, 4, 3), datetime.date(2026, 4, 1)
-        )
-
-        assert result == []
+        with pytest.raises(ValueError):
+            DailyDiscovery(client, ["8-K"]).discover(
+                datetime.date(2026, 4, 3), datetime.date(2026, 4, 1)
+            )
 
 
 class TestFindFormTypeCol:
@@ -314,7 +320,7 @@ def _make_historical_client(mocker, zip_bytes: bytes):
         return _cm()
 
     mocker.patch(
-        "idi_sec_scraper.processor.discovery.open_zip",
+        "idi_sec_scraper.discovery.open_zip",
         side_effect=lambda path, headers=None: fake_open_zip(path, headers),
     )
     return client
@@ -508,14 +514,14 @@ class TestDiscoverHistorical:
         }
         zb = _make_zip({"CIK0000111111.json": bad})
         client = _make_historical_client(mocker, zb)
-        mock_logger = mocker.patch("idi_sec_scraper.processor.discovery._logger")
+        mock_logger = mocker.patch("idi_sec_scraper.discovery._logger")
         list(HistoricalDiscovery(client, [".*"]).discover("fake://path.zip"))
 
         mock_logger.error.assert_called_once()
         assert "mismatched" in mock_logger.error.call_args.args[0]
 
     def test_mismatched_list_lengths_registers_failure(self, mocker):
-        from idi_sec_scraper.processor.failures import SECScraperFailureClassifier
+        from idi_sec_scraper.failures import SECScraperFailureClassifier
 
         bad = {
             "cik": "111111",
@@ -537,7 +543,7 @@ class TestDiscoverHistorical:
         assert ("111111", "CIK0000111111.json") in registry._entries
 
     def test_known_mismatched_cik_file_is_skipped(self, mocker):
-        from idi_sec_scraper.processor.failures import SECScraperFailureClassifier
+        from idi_sec_scraper.failures import SECScraperFailureClassifier
 
         zb = _make_zip({"CIK0000320193.json": _APPLE_CIK_JSON})
         client = _make_historical_client(mocker, zb)
@@ -549,7 +555,7 @@ class TestDiscoverHistorical:
         assert result == []
 
     def test_missing_overflow_file_registers_failure(self, mocker):
-        from idi_sec_scraper.processor.failures import SECScraperFailureClassifier
+        from idi_sec_scraper.failures import SECScraperFailureClassifier
 
         data = {
             "cik": "320193",
@@ -567,7 +573,7 @@ class TestDiscoverHistorical:
         assert ("320193", "CIK0000320193-submissions-missing.json") in registry._entries
 
     def test_known_missing_overflow_file_is_skipped(self, mocker):
-        from idi_sec_scraper.processor.failures import SECScraperFailureClassifier
+        from idi_sec_scraper.failures import SECScraperFailureClassifier
 
         data = {
             "cik": "320193",
@@ -581,7 +587,7 @@ class TestDiscoverHistorical:
         client = _make_historical_client(mocker, zb)
         registry = FailureRegistry("", SECScraperFailureClassifier())
         registry._entries.add(("320193", "CIK0000320193-submissions-missing.json"))
-        mock_logger = mocker.patch("idi_sec_scraper.processor.discovery._logger")
+        mock_logger = mocker.patch("idi_sec_scraper.discovery._logger")
         list(HistoricalDiscovery(client, [".*"], registry).discover("fake://path.zip"))
 
         # warning about skipping, not error about missing
@@ -604,7 +610,7 @@ class TestDiscoverHistorical:
         }
         zb = _make_zip({"CIK0000320193.json": data})
         client = _make_historical_client(mocker, zb)
-        mock_logger = mocker.patch("idi_sec_scraper.processor.discovery._logger")
+        mock_logger = mocker.patch("idi_sec_scraper.discovery._logger")
         list(HistoricalDiscovery(client, [".*"]).discover("fake://path.zip"))
 
         mock_logger.error.assert_called_once()
@@ -613,7 +619,7 @@ class TestDiscoverHistorical:
     def test_eof_error_in_cik_file_returns_empty(self, mocker):
         zb = _make_zip({"CIK0000111111.json": _APPLE_CIK_JSON})
         client = _make_historical_client(mocker, zb)
-        mocker.patch("idi_sec_scraper.processor.discovery.json.load", side_effect=EOFError())
+        mocker.patch("idi_sec_scraper.discovery.json.load", side_effect=EOFError())
         result = list(HistoricalDiscovery(client, [".*"]).discover("fake://path.zip"))
 
         assert result == []
@@ -621,8 +627,8 @@ class TestDiscoverHistorical:
     def test_eof_error_in_cik_file_logs_error(self, mocker):
         zb = _make_zip({"CIK0000111111.json": _APPLE_CIK_JSON})
         client = _make_historical_client(mocker, zb)
-        mocker.patch("idi_sec_scraper.processor.discovery.json.load", side_effect=EOFError())
-        mock_logger = mocker.patch("idi_sec_scraper.processor.discovery._logger")
+        mocker.patch("idi_sec_scraper.discovery.json.load", side_effect=EOFError())
+        mock_logger = mocker.patch("idi_sec_scraper.discovery._logger")
         list(HistoricalDiscovery(client, [".*"]).discover("fake://path.zip"))
 
         mock_logger.error.assert_called_once()
@@ -644,7 +650,7 @@ class TestDiscoverHistorical:
             zf.writestr("CIK0000111111.json", b"not valid json {")
         zb = buf.getvalue()
         client = _make_historical_client(mocker, zb)
-        mock_logger = mocker.patch("idi_sec_scraper.processor.discovery._logger")
+        mock_logger = mocker.patch("idi_sec_scraper.discovery._logger")
         list(HistoricalDiscovery(client, [".*"]).discover("fake://path.zip"))
 
         mock_logger.error.assert_called_once()

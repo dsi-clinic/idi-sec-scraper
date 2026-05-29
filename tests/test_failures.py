@@ -1,7 +1,7 @@
 """Tests for processor.failures."""
 
 # Application imports
-from idi_sec_scraper.processor.failures import FailureType, SECScraperFailureClassifier
+from idi_sec_scraper.failures import FailureType, SECScraperFailureClassifier
 
 
 class TestFailureType:

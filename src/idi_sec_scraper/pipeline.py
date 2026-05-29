@@ -6,39 +6,37 @@ import datetime
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from typing import Any
+
+# Application imports
+from idi_ftm2j_shared.api import SecClient
 
 # Third party imports
 from idi_ftm2j_shared.failures import FailureRegistry
 from idi_ftm2j_shared.logs import get_logger
-
-# Application imports
-from idi_sec_scraper.common.api import SecClient
-from idi_sec_scraper.common.storage import (
+from idi_ftm2j_shared.sec import _S3_ROOT, get_filing
+from idi_ftm2j_shared.storage import (
     key_exists,
     load_content,
-    load_json,
     save_content,
     save_json,
     save_stream,
 )
-from idi_sec_scraper.processor.discovery import DailyDiscovery, Discovery, HistoricalDiscovery
-from idi_sec_scraper.processor.document_filters import (
+from idi_ftm2j_shared.types import DiscoveredFiling, ScrapedDocument, ScrapedFiling
+
+from idi_sec_scraper.discovery import DailyDiscovery, Discovery, HistoricalDiscovery
+from idi_sec_scraper.document_filters import (
     find_form_type_entry,
     load_document_filters,
     select_and_filter_documents,
 )
-from idi_sec_scraper.processor.failures import FailureType, SECScraperFailureClassifier
-from idi_sec_scraper.processor.manifest import ManifestWriter
-from idi_sec_scraper.processor.parser import parse_index_htm
-from idi_sec_scraper.processor.paths import filing_s3_prefix
-from idi_sec_scraper.processor.types import (
-    DiscoveredFiling,
+from idi_sec_scraper.failures import FailureType, SECScraperFailureClassifier
+from idi_sec_scraper.manifest import ManifestWriter
+from idi_sec_scraper.parser import parse_index_htm
+from idi_sec_scraper.paths import filing_s3_prefix
+from idi_sec_scraper.types import (
     DocumentFilterConfig,
     PipelineConfig,
     PipelineStats,
-    ScrapedDocument,
-    ScrapedFiling,
 )
 
 
@@ -53,23 +51,6 @@ def _new_scraped_filing(filing: DiscoveredFiling) -> ScrapedFiling:
         index_url=filing.url,
         company_name=filing.company_name,
         documents=[],
-    )
-
-
-def _scraped_filing_from_dict(data: dict[str, Any]) -> ScrapedFiling:
-    """Deserialize a ScrapedFiling from a manifest dict read from S3."""
-    documents = [ScrapedDocument(**d) for d in data.get("documents", [])]
-    return ScrapedFiling(
-        cik=data["cik"],
-        accession_number=data["accession_number"],
-        form_type=data["form_type"],
-        filing_date=data["filing_date"],
-        report_date=data.get("report_date", ""),
-        last_scraped_at=data["last_scraped_at"],
-        index_url=data.get("index_url", ""),
-        company_name=data.get("company_name", ""),
-        failure_reason=data.get("failure_reason", ""),
-        documents=documents,
     )
 
 
@@ -297,8 +278,10 @@ class SECScraperPipeline(Pipeline, ABC):
 
         if key_exists(filing_manifest_s3_key):
             index_html = load_content(filing_index_s3_key).decode()
-            manifest_data = load_json(filing_manifest_s3_key)
-            return index_html, _scraped_filing_from_dict(manifest_data), True
+            scraped_filing = get_filing(
+                filing.form_type, filing.filing_date, filing.cik, filing.accession_number
+            )
+            return index_html, scraped_filing, True
 
         response = self.sec_client.query_endpoint(sec_url=filing.url, return_json=False)
         if "error" in response:
@@ -468,7 +451,7 @@ class HistoricalSECScraperPipeline(SECScraperPipeline):
         submissions_url = self.config.submissions_url
         # If the submissions.zip is not in s3 already, download it to s3 first
         if submissions_url.startswith("https://"):
-            s3_url = f"s3://{self.config.bucket}/sec/submissions.zip"
+            s3_url = f"s3://{self.config.bucket}/{_S3_ROOT}/submissions.zip"
             self.logger.info("Downloading submissions.zip from SEC to %s", s3_url)
             response = self.sec_client.session.get(
                 submissions_url, headers=self.sec_client.SEC_HEADERS, stream=True

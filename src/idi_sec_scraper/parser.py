@@ -6,10 +6,11 @@ import re
 
 # Third party imports
 from bs4 import BeautifulSoup
+from idi_ftm2j_shared.types import DiscoveredFiling
 
 # Application imports
-from idi_sec_scraper.processor.failures import FailureType
-from idi_sec_scraper.processor.types import DiscoveredFiling, ParsedDocument, ParsedFiling
+from idi_sec_scraper.failures import FailureType
+from idi_sec_scraper.types import ParsedDocument, ParsedFiling
 
 _SEC_BASE_URL = "https://www.sec.gov"
 _IXBRL_PREFIX = "/ix?doc="

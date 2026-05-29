@@ -5,12 +5,13 @@ import argparse
 import datetime
 
 # Application imports
-from idi_sec_scraper.common.api import SecClient
-from idi_sec_scraper.processor.pipeline import (
+from idi_ftm2j_shared.api import SecClient
+
+from idi_sec_scraper.pipeline import (
     DailySECScraperPipeline,
     HistoricalSECScraperPipeline,
 )
-from idi_sec_scraper.processor.types import DailyPipelineConfig, HistoricalPipelineConfig
+from idi_sec_scraper.types import DailyPipelineConfig, HistoricalPipelineConfig
 
 
 def main() -> None:
@@ -85,7 +86,6 @@ def main() -> None:
     )
 
     args = parser.parse_args()
-    sec_client = SecClient(rate_limit=args.rate_limit)
 
     if args.mode == "daily":
         # If neither date is given, default both to yesterday.
@@ -99,6 +99,8 @@ def main() -> None:
             parser.error("--start-date is required when --end-date is provided")
         elif args.end_date is None:
             parser.error("--end-date is required when --start-date is provided")
+
+    sec_client = SecClient(rate_limit=args.rate_limit)
 
     if args.mode == "historical":
         config = HistoricalPipelineConfig(
