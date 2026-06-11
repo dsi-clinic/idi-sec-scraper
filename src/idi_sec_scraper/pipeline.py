@@ -279,7 +279,11 @@ class SECScraperPipeline(Pipeline, ABC):
         if key_exists(filing_manifest_s3_key):
             index_html = load_content(filing_index_s3_key).decode()
             scraped_filing = get_filing(
-                filing.form_type, filing.filing_date, filing.cik, filing.accession_number
+                filing.form_type,
+                filing.filing_date,
+                filing.cik,
+                filing.accession_number,
+                bucket=self.config.bucket,
             )
             return index_html, scraped_filing, True
 
