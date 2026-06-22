@@ -20,6 +20,10 @@ form_types:
           - field: type
             operator: regex
             value: '^EX-8'
+      - all_of:
+          - field: type
+            operator: regex
+            value: '^20-F'
 
   10-Q:
     match: '10-?Q'
