@@ -51,7 +51,7 @@ def _make_pipeline(mocker, cls, config):
     )
     mocker.patch("idi_sec_scraper.pipeline.ManifestWriter")
     sec_client = mocker.MagicMock()
-    sec_client.SEC_HEADERS = {}
+    sec_client.sec_headers = {}
     return cls(config, sec_client)
 
 
@@ -133,7 +133,7 @@ class TestHistoricalLoadInput:
         mock_cls = mocker.patch("idi_sec_scraper.pipeline.HistoricalDiscovery")
         mock_cls.return_value.discover.return_value = []
         sec_client = mocker.MagicMock()
-        sec_client.SEC_HEADERS = {}
+        sec_client.sec_headers = {}
         config = HistoricalPipelineConfig(
             bucket=_BUCKET,
             document_filters_path=_FILTERS_PATH,
@@ -159,7 +159,7 @@ class TestHistoricalLoadInput:
         mock_cls.return_value.discover.return_value = []
         mock_stream = mocker.patch("idi_sec_scraper.pipeline.save_stream")
         sec_client = mocker.MagicMock()
-        sec_client.SEC_HEADERS = {"User-Agent": "test"}
+        sec_client.sec_headers = {"User-Agent": "test"}
         https_url = "https://www.sec.gov/Archives/edgar/daily-index/bulkdata/submissions.zip"
         config = HistoricalPipelineConfig(
             bucket=_BUCKET,
@@ -189,7 +189,7 @@ class TestHistoricalLoadInput:
         mock_cls.return_value.discover.return_value = []
         mock_stream = mocker.patch("idi_sec_scraper.pipeline.save_stream")
         sec_client = mocker.MagicMock()
-        sec_client.SEC_HEADERS = {}
+        sec_client.sec_headers = {}
         config = HistoricalPipelineConfig(
             bucket=_BUCKET,
             document_filters_path=_FILTERS_PATH,
@@ -213,7 +213,7 @@ class TestHistoricalLoadInput:
         mock_cls = mocker.patch("idi_sec_scraper.pipeline.HistoricalDiscovery")
         mock_cls.return_value.discover.return_value = []
         sec_client = mocker.MagicMock()
-        sec_client.SEC_HEADERS = {}
+        sec_client.sec_headers = {}
         config = HistoricalPipelineConfig(
             bucket=_BUCKET,
             document_filters_path=_FILTERS_PATH,
@@ -237,7 +237,7 @@ class TestDailyLoadInput:
         mock_cls = mocker.patch("idi_sec_scraper.pipeline.DailyDiscovery")
         mock_cls.return_value.discover.return_value = []
         sec_client = mocker.MagicMock()
-        sec_client.SEC_HEADERS = {}
+        sec_client.sec_headers = {}
         config = DailyPipelineConfig(
             bucket=_BUCKET,
             document_filters_path=_FILTERS_PATH,
@@ -263,7 +263,7 @@ class TestDailyLoadInput:
         mock_cls = mocker.patch("idi_sec_scraper.pipeline.DailyDiscovery")
         mock_cls.return_value.discover.return_value = []
         sec_client = mocker.MagicMock()
-        sec_client.SEC_HEADERS = {}
+        sec_client.sec_headers = {}
         config = DailyPipelineConfig(bucket=_BUCKET, document_filters_path=_FILTERS_PATH)
         pipeline = DailySECScraperPipeline(config, sec_client)
         assert pipeline.discovery is mock_cls.return_value
@@ -903,7 +903,7 @@ class TestProcess:
         mocker.patch("idi_sec_scraper.pipeline.ManifestWriter")
         _patch_scrape_deps(mocker, docs=[_DOC])
         sec_client = mocker.MagicMock()
-        sec_client.SEC_HEADERS = {}
+        sec_client.sec_headers = {}
         pipeline = DailySECScraperPipeline(
             DailyPipelineConfig(bucket=_BUCKET, document_filters_path=_FILTERS_PATH),
             sec_client,
@@ -928,7 +928,7 @@ class TestProcess:
         mocker.patch("idi_sec_scraper.pipeline.ManifestWriter")
         _patch_scrape_deps(mocker)
         sec_client = mocker.MagicMock()
-        sec_client.SEC_HEADERS = {}
+        sec_client.sec_headers = {}
         pipeline = DailySECScraperPipeline(
             DailyPipelineConfig(bucket=_BUCKET, document_filters_path=_FILTERS_PATH),
             sec_client,

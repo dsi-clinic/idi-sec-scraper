@@ -49,7 +49,7 @@ _SAMPLE_IDX = (
 
 def _make_sec_client(mocker, content: str = _SAMPLE_IDX):
     client = mocker.MagicMock()
-    client.SEC_HEADERS = {}
+    client.sec_headers = {}
     client.query_endpoint.return_value = {"status_code": 200, "data": content}
     return client
 
@@ -178,7 +178,7 @@ class TestDiscoverDaily:
     def test_date_range_results_ordered_by_date_ascending(self, mocker):
         apr2_idx = _SAMPLE_IDX.replace("20260401", "20260402")
         client = mocker.MagicMock()
-        client.SEC_HEADERS = {}
+        client.sec_headers = {}
         client.query_endpoint.side_effect = [
             {"status_code": 200, "data": _SAMPLE_IDX},
             {"status_code": 200, "data": apr2_idx},
@@ -192,7 +192,7 @@ class TestDiscoverDaily:
 
     def test_missing_day_is_skipped_gracefully(self, mocker):
         client = mocker.MagicMock()
-        client.SEC_HEADERS = {}
+        client.sec_headers = {}
         client.query_endpoint.side_effect = [
             {"status_code": 200, "data": _SAMPLE_IDX},
             {"status_code": 404, "error": "HTTP 404"},
@@ -206,7 +206,7 @@ class TestDiscoverDaily:
 
     def test_missing_day_logs_error(self, mocker):
         client = mocker.MagicMock()
-        client.SEC_HEADERS = {}
+        client.sec_headers = {}
         client.query_endpoint.return_value = {"status_code": 404, "error": "HTTP 404"}
         mock_logger = mocker.patch("idi_ftm2j_shared.sec._logger")
         DailyDiscovery(client, ["8-K"]).discover(
@@ -308,7 +308,7 @@ def _make_zip(files: dict[str, dict]) -> bytes:
 
 def _make_historical_client(mocker, zip_bytes: bytes):
     client = mocker.MagicMock()
-    client.SEC_HEADERS = {}
+    client.sec_headers = {}
 
     def fake_open_zip(path, headers=None):
         import contextlib
