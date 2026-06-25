@@ -458,7 +458,7 @@ class HistoricalSECScraperPipeline(SECScraperPipeline):
             s3_url = f"s3://{self.config.bucket}/{_S3_ROOT}/submissions.zip"
             self.logger.info("Downloading submissions.zip from SEC to %s", s3_url)
             response = self.sec_client.session.get(
-                submissions_url, headers=self.sec_client.SEC_HEADERS, stream=True
+                submissions_url, headers=self.sec_client.sec_headers, stream=True
             )
             response.raise_for_status()
             response.raw.decode_content = True

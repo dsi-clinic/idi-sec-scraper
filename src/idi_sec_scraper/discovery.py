@@ -111,7 +111,7 @@ class HistoricalDiscovery(Discovery):
         Yields:
             :class:`DiscoveredFiling` objects for all matching rows.
         """
-        with open_zip(submissions_url, headers=self.sec_client.SEC_HEADERS) as zf:
+        with open_zip(submissions_url, headers=self.sec_client.sec_headers) as zf:
             names = zf.namelist()
             cik_names = [n for n in names if n.startswith("CIK") and n.endswith(".json")]
             if max_ciks is not None:
