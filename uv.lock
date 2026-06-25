@@ -571,7 +571,7 @@ wheels = [
 
 [[package]]
 name = "idi-sec-scraper"
-version = "0.1.1a5"
+version = "0.1.1a6"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
