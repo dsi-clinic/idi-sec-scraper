@@ -15,14 +15,17 @@ ecr_registry = pulumi.Output.from_input(config.caller.account_id).apply(
     lambda aid: f"{aid}.dkr.ecr.{config.aws_region}.amazonaws.com"
 )
 
+# Repo name carries the image name (`-orchestrator`) so it matches what the
+# shared pipeline's sync-ecr job pushes to:
+# {pulumi_project}-{stack}-{app_name}-{image_name} = idi-<stack>-sec-scraper-orchestrator.
 ecr_repo = aws.ecr.Repository(
     "idi-ecr-scraper",
-    name=config.name_prefix,
+    name=f"{config.name_prefix}-orchestrator",
     force_delete=True,
     tags=config.tags(),
 )
 
-scraper_image = ecr_registry.apply(lambda r: f"{r}/{config.name_prefix}:latest")
+scraper_image = ecr_registry.apply(lambda r: f"{r}/{config.name_prefix}-orchestrator:latest")
 
 # Lifecycle policy — expire images beyond the last N to avoid unbounded storage growth
 ecr_lifecycle_policy = aws.ecr.LifecyclePolicy(

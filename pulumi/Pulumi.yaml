@@ -11,9 +11,11 @@ config:
     description: Name of the application
     default: "sec-scraper"
 
+  # The processor bucket and scheduler DLQ are NOT declared here — they are
+  # shared values read at runtime from SSM (/idi/<stack>/shared/*).
+
   idi:sec_user_agent:
-    description: "SEC EDGAR User-Agent header value (format: Name email@example.com)"
-    secret: true
+    description: "SEC EDGAR User-Agent header — public contact string (Name email@example.com), injected as env var"
 
   idi:cron_sec_scraper:
     description: EventBridge cron schedule for the SEC scraper (daily run)
@@ -39,15 +41,9 @@ config:
     description: Whether the EventBridge schedule is enabled
     default: "false"
 
-  idi:bucket_name:
-    description: S3 bucket name for scraped filings (created externally)
-
   idi:log_retention_days:
     description: CloudWatch log group retention in days
     default: "30"
-
-  idi:shared_dlq_name:
-    description: Name of the shared SQS DLQ from idi-ftm2j-shared
 
   idi:ecr_image_count:
     description: ECR image retention count

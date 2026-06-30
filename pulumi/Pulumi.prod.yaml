@@ -1,0 +1,14 @@
+# Committed variable config for the prod stack. The processor bucket and
+# scheduler DLQ are read from SSM (/idi/prod/shared/*), so they are NOT set here.
+# The SEC User-Agent is a public contact string (committed, injected as env var).
+#
+# Schedule is intentionally DISABLED (idi:schedule_enabled: "false") until prod
+# is validated; flip to "true" once verified.
+config:
+  idi:sec_user_agent: "<REQUIRED: SEC EDGAR contact, e.g. 'DSI Core Facility dsicorefacility_project8@uchicago.edu'>"
+  idi:cron_sec_scraper: "cron(0 3 * * ? *)"
+  idi:cpu: "1024"
+  idi:memory: "8192"
+  idi:rate_limit: "0.15"
+  idi:max_workers: "15"
+  idi:schedule_enabled: "false"
