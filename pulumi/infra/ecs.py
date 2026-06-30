@@ -6,7 +6,7 @@ import pulumi_aws as aws
 
 import pulumi
 
-from . import config, ecr, iam, logs, secrets
+from . import config, ecr, iam, logs
 
 # -----------------------------------------------------------------------------
 # ECS Cluster (Fargate only)
@@ -39,7 +39,6 @@ container_definitions = pulumi.Output.all(
     image=ecr.scraper_image,
     log_group_name=logs.log_group.name,
     region=config.aws_region,
-    sec_user_agent_secret_arn=secrets.sec_user_agent_secret.arn,
 ).apply(
     lambda args: json.dumps(
         [
@@ -52,12 +51,7 @@ container_definitions = pulumi.Output.all(
                     {"name": "AWS_REGION", "value": args["region"]},
                     {"name": "CLOUDWATCH_LOGS_ENABLED", "value": "false"},
                     {"name": "PYTHONUNBUFFERED", "value": "1"},
-                ],
-                "secrets": [
-                    {
-                        "name": "SEC_USER_AGENT",
-                        "valueFrom": args["sec_user_agent_secret_arn"],
-                    },
+                    {"name": "SEC_USER_AGENT", "value": config.sec_user_agent},
                 ],
                 "logConfiguration": {
                     "logDriver": "awslogs",

@@ -1,0 +1,12 @@
+# Committed variable config for the dev stack. The processor bucket and
+# scheduler DLQ are read from SSM (/idi/dev/shared/*), so they are NOT set here.
+# The SEC User-Agent is a public contact string (committed, injected as env var),
+# not a secret.
+config:
+  idi:sec_user_agent: "DSI Core Facility dsicorefacility_project8@uchicago.edu"
+  idi:cron_sec_scraper: "cron(0 3 * * ? *)"
+  idi:cpu: "1024"
+  idi:memory: "8192"
+  idi:rate_limit: "0.15"
+  idi:max_workers: "15"
+  idi:schedule_enabled: "false"
