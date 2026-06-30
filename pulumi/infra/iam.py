@@ -20,7 +20,11 @@ from . import config, ecr, logs
 task_execution_role = aws.iam.Role(
     "idi-role-ecs-execution",
     name=f"{config.name_prefix}-role-ecs-execution",
-    description="ECS task execution role: image pull, awslogs",
+    # Keep this description byte-identical to the originally-deployed value. The
+    # scoped per-repo deploy role has iam:UpdateRole but NOT the legacy
+    # iam:UpdateRoleDescription action the AWS provider uses for description-only
+    # edits, so changing this string makes `pulumi up` fail on the existing role.
+    description="ECS task execution role: image pull, awslogs, secrets",
     assume_role_policy=json.dumps(
         {
             "Version": "2012-10-17",
