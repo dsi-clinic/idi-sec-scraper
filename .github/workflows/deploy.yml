@@ -28,4 +28,4 @@ jobs:
     secrets: inherit
     with:
       app-name: sec-scraper
-      images: '[{"name":"scraper","dockerfile":"dockerfiles/Dockerfile.scraper"}]'
+      images: '[{"name":"orchestrator","dockerfile":"dockerfiles/Dockerfile.scraper"}]'

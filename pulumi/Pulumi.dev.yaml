@@ -9,4 +9,5 @@ config:
   idi:memory: "8192"
   idi:rate_limit: "0.15"
   idi:max_workers: "15"
-  idi:schedule_enabled: "false"
+  idi:schedule_enabled: "true"
+encryptionsalt: v1:tY0sihxk8/Y=:v1:ogRRQpJdoIj4fhft:gibKaQpgKhXTHW5hbIAx02geKeaFxw==
