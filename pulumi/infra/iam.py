@@ -12,6 +12,8 @@ import json
 
 import pulumi_aws as aws
 
+import pulumi
+
 from . import config, ecr, logs
 
 # -----------------------------------------------------------------------------
@@ -20,10 +22,6 @@ from . import config, ecr, logs
 task_execution_role = aws.iam.Role(
     "idi-role-ecs-execution",
     name=f"{config.name_prefix}-role-ecs-execution",
-    # Keep this description byte-identical to the originally-deployed value. The
-    # scoped per-repo deploy role has iam:UpdateRole but NOT the legacy
-    # iam:UpdateRoleDescription action the AWS provider uses for description-only
-    # edits, so changing this string makes `pulumi up` fail on the existing role.
     description="ECS task execution role: image pull, awslogs, secrets",
     assume_role_policy=json.dumps(
         {
@@ -38,6 +36,13 @@ task_execution_role = aws.iam.Role(
         }
     ),
     tags=config.tags(),
+    # The scoped per-repo deploy role has iam:UpdateRole but NOT the legacy
+    # iam:UpdateRoleDescription action the AWS provider uses for description-only
+    # edits. The role's live description differs from what's set here, so without
+    # this Pulumi would attempt an UpdateRoleDescription and `pulumi up` fails
+    # (AccessDenied). The description is cosmetic — ignore it so it is never
+    # reconciled. (New environments still get the description above at create.)
+    opts=pulumi.ResourceOptions(ignore_changes=["description"]),
 )
 
 # Inline: pull from our specific ECR repo only
