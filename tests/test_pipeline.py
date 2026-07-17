@@ -635,6 +635,45 @@ class TestScrapeFiling:
         mock_load_content.assert_called_once()
         pipeline.sec_client.query_endpoint.assert_not_called()
 
+    def test_known_filing_in_daily_index_logs_warning(self, mocker):
+        _patch_scrape_deps(mocker, cached=True)
+        mocker.patch("idi_sec_scraper.pipeline.load_content", return_value=b"<html/>")
+        pipeline = _make_pipeline(
+            mocker,
+            DailySECScraperPipeline,
+            DailyPipelineConfig(
+                bucket=_BUCKET,
+                document_filters_path=_FILTERS_PATH,
+            ),
+        )
+        mock_logger = mocker.patch.object(pipeline, "logger")
+        pipeline._scrape_filing(_FILING)
+
+        warnings = [
+            call.args[0] for call in mock_logger.warning.call_args_list if call.args
+        ]
+        assert any("Known filing seen in daily index" in msg for msg in warnings)
+
+    def test_known_filing_in_historical_run_does_not_warn(self, mocker):
+        _patch_scrape_deps(mocker, cached=True)
+        mocker.patch("idi_sec_scraper.pipeline.load_content", return_value=b"<html/>")
+        pipeline = _make_pipeline(
+            mocker,
+            HistoricalSECScraperPipeline,
+            HistoricalPipelineConfig(
+                bucket=_BUCKET,
+                document_filters_path=_FILTERS_PATH,
+                submissions_url="s3://x/s.zip",
+            ),
+        )
+        mock_logger = mocker.patch.object(pipeline, "logger")
+        pipeline._scrape_filing(_FILING)
+
+        warnings = [
+            call.args[0] for call in mock_logger.warning.call_args_list if call.args
+        ]
+        assert not any("Known filing seen in daily index" in msg for msg in warnings)
+
     def test_failed_document_fetch_increments_stat(self, mocker):
         doc = ParsedDocument(
             seq="1",
