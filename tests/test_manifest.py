@@ -68,7 +68,45 @@ class TestFilingsToDf:
             "type",
             "s3_key",
             "url",
+            "date_scraped",
         ]
+
+    def test_empty_list_date_scraped_is_datetime_utc(self):
+        result = _filings_to_df([])
+        assert isinstance(result["date_scraped"].dtype, pd.DatetimeTZDtype)
+        assert str(result["date_scraped"].dtype) == "datetime64[ns, UTC]"
+
+    def test_date_scraped_column_is_datetime_utc(self):
+        result = _filings_to_df([_FILING])
+        assert isinstance(result["date_scraped"].dtype, pd.DatetimeTZDtype)
+        assert str(result["date_scraped"].dtype) == "datetime64[ns, UTC]"
+        assert result.iloc[0]["date_scraped"] == pd.Timestamp(
+            "2026-02-24T04:25:07.912991+00:00"
+        )
+
+    def test_empty_date_scraped_becomes_nat(self):
+        filing = ScrapedFiling(
+            cik="320193",
+            accession_number="0001140361-26-006577",
+            form_type="8-K",
+            filing_date="2026-02-24",
+            index_url="https://example.com/index.htm",
+            company_name="Apple Inc.",
+            documents=[
+                ScrapedDocument(
+                    seq="1",
+                    description="8-K",
+                    filename="report.htm",
+                    type="8-K",
+                    s3_key="s3://test-bucket/report.htm",
+                    url="https://example.com/report.htm",
+                    date_scraped="",
+                )
+            ],
+        )
+        result = _filings_to_df([filing])
+        assert pd.isna(result.iloc[0]["date_scraped"])
+        assert str(result["date_scraped"].dtype) == "datetime64[ns, UTC]"
 
     def test_filing_with_no_documents_produces_no_rows(self):
         result = _filings_to_df([_FILING_NO_DOCS])

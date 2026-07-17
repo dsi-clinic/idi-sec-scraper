@@ -25,11 +25,18 @@ _MANIFEST_COLUMNS = [
     "type",
     "s3_key",
     "url",
+    "date_scraped",
 ]
 
 
 def _filings_to_df(filings: list[ScrapedFiling]) -> pd.DataFrame:
-    """Flatten a list of ScrapedFilings into a per-document DataFrame."""
+    """Flatten a list of ScrapedFilings into a per-document DataFrame.
+
+    ``date_scraped`` is stored as a real ``datetime64[ns, UTC]`` column (parsed
+    from each document's ISO-8601 timestamp) so scraped-date range queries and
+    predicate pushdown work when the parquet is read as an index. Missing or
+    empty values (e.g. pre-migration manifests, before backfill) become ``NaT``.
+    """
     rows = [
         {
             "cik": filing.cik,
@@ -42,13 +49,20 @@ def _filings_to_df(filings: list[ScrapedFiling]) -> pd.DataFrame:
             "type": doc.type,
             "s3_key": doc.s3_key,
             "url": doc.url,
+            "date_scraped": doc.date_scraped,
         }
         for filing in filings
         for doc in filing.documents
     ]
     if not rows:
-        return pd.DataFrame(columns=_MANIFEST_COLUMNS)
-    return pd.DataFrame(rows)
+        df = pd.DataFrame(columns=_MANIFEST_COLUMNS)
+        df["date_scraped"] = pd.Series(dtype="datetime64[ns, UTC]")
+        return df
+    df = pd.DataFrame(rows)
+    df["date_scraped"] = pd.to_datetime(
+        df["date_scraped"], utc=True, errors="coerce"
+    ).astype("datetime64[ns, UTC]")
+    return df
 
 
 def update_bucket_manifest(bucket: str, filings: list[ScrapedFiling]) -> None:
