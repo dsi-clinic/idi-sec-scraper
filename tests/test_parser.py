@@ -142,12 +142,6 @@ class TestParseIndexHtm:
 
         assert parsed.cik == "320193"
 
-    def test_last_scraped_at_is_utc_datetime(self):
-        parsed, _ = parse_index_htm(_SAMPLE_HTML, _SAMPLE_FILING)
-
-        assert isinstance(parsed.last_scraped_at, datetime.datetime)
-        assert parsed.last_scraped_at.tzinfo == datetime.UTC
-
     def test_documents_from_both_tables(self):
         parsed, _ = parse_index_htm(_SAMPLE_HTML, _SAMPLE_FILING)
 
@@ -315,7 +309,6 @@ class TestValidateParsedFiling:
             "form_type": _SAMPLE_FILING.form_type,
             "filing_date": _SAMPLE_FILING.filing_date,
             "report_date": None,
-            "last_scraped_at": datetime.datetime.now(datetime.UTC),
         }
         defaults.update(overrides)
         return ParsedFiling(**defaults)

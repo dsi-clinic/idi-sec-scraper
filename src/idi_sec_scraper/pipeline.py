@@ -47,7 +47,6 @@ def _new_scraped_filing(filing: DiscoveredFiling) -> ScrapedFiling:
         accession_number=filing.accession_number,
         form_type=filing.form_type,
         filing_date=filing.filing_date.isoformat(),
-        last_scraped_at=datetime.datetime.now(datetime.UTC).isoformat(),
         index_url=filing.url,
         company_name=filing.company_name,
         documents=[],
@@ -352,7 +351,6 @@ class SECScraperPipeline(Pipeline, ABC):
                 filing.accession_number,
             )
             scraped_filing.failure_reason = str(failure_type)
-            scraped_filing.last_scraped_at = datetime.datetime.now(datetime.UTC).isoformat()
             save_json(f"{prefix}/manifest.json", dataclasses.asdict(scraped_filing))
             self.failure_registry.add(failure_key, failure_type)
             return None
@@ -378,7 +376,6 @@ class SECScraperPipeline(Pipeline, ABC):
                 filing.accession_number,
             )
             scraped_filing.failure_reason = str(FailureType.DOCUMENTS_MISSING)
-            scraped_filing.last_scraped_at = datetime.datetime.now(datetime.UTC).isoformat()
             save_json(f"{prefix}/manifest.json", dataclasses.asdict(scraped_filing))
             self.failure_registry.add(failure_key, FailureType.DOCUMENTS_MISSING)
             return None
@@ -426,6 +423,7 @@ class SECScraperPipeline(Pipeline, ABC):
                     type=doc.type,
                     s3_key=doc_s3_url,
                     url=doc.url,
+                    date_scraped=datetime.datetime.now(datetime.UTC).isoformat(),
                 )
             )
             self.stats.increment("scraped_documents")
@@ -433,7 +431,6 @@ class SECScraperPipeline(Pipeline, ABC):
 
         was_fully_cached = index_was_cached and new_doc_count == 0 and failed_doc_count == 0
         if not was_fully_cached:
-            scraped_filing.last_scraped_at = datetime.datetime.now(datetime.UTC).isoformat()
             save_json(f"{prefix}/manifest.json", dataclasses.asdict(scraped_filing))
         return scraped_filing, was_fully_cached
 

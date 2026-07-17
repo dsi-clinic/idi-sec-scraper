@@ -196,7 +196,6 @@ Every filing directory contains a `manifest.json` written after scraping. This i
   "accession_number": "0001140361-26-006577",
   "form_type": "8-K",
   "filing_date": "2026-02-24",
-  "last_scraped_at": "2026-04-30T12:00:00+00:00",
   "index_url": "https://www.sec.gov/Archives/edgar/data/320193/000114036126006577/0001140361-26-006577-index.htm",
   "company_name": "Apple Inc.",
   "report_date": "2026-02-24",
@@ -208,7 +207,8 @@ Every filing directory contains a `manifest.json` written after scraping. This i
       "filename": "ef20060722_8k.htm",
       "type": "8-K",
       "s3_key": "s3://idi-dev-processor/sec/2026-02-24/8-K/320193/000114036126006577/ef20060722_8k.htm",
-      "url": "https://www.sec.gov/Archives/edgar/data/320193/000114036126006577/ef20060722_8k.htm"
+      "url": "https://www.sec.gov/Archives/edgar/data/320193/000114036126006577/ef20060722_8k.htm",
+      "date_scraped": "2026-04-30T12:00:00+00:00"
     }
   ]
 }
@@ -220,7 +220,6 @@ Every filing directory contains a `manifest.json` written after scraping. This i
 | `accession_number` | SEC accession number in `NNNNNNNNNN-YY-NNNNNN` format |
 | `form_type` | Raw form type string as filed with SEC |
 | `filing_date` | Date the filing was made (`YYYY-MM-DD`) |
-| `last_scraped_at` | ISO 8601 UTC timestamp of the last scrape |
 | `index_url` | URL of the SEC EDGAR index page for this filing |
 | `company_name` | Company name as it appears in the SEC submission |
 | `report_date` | Period of report date (`YYYY-MM-DD`), or empty string if not present on the index page |
@@ -232,6 +231,7 @@ Every filing directory contains a `manifest.json` written after scraping. This i
 | `documents[].type` | Document type (e.g. `EX-21.1`, `8-K`) |
 | `documents[].s3_key` | Full `s3://` path to the downloaded file |
 | `documents[].url` | Original SEC EDGAR URL |
+| `documents[].date_scraped` | ISO 8601 UTC timestamp the document was pulled to S3; set once when first fetched and retained on re-scrape |
 
 ### How the bucket is populated
 
