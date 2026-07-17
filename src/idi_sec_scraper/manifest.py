@@ -59,9 +59,9 @@ def _filings_to_df(filings: list[ScrapedFiling]) -> pd.DataFrame:
         df["date_scraped"] = pd.Series(dtype="datetime64[ns, UTC]")
         return df
     df = pd.DataFrame(rows)
-    df["date_scraped"] = pd.to_datetime(
-        df["date_scraped"], utc=True, errors="coerce"
-    ).astype("datetime64[ns, UTC]")
+    df["date_scraped"] = pd.to_datetime(df["date_scraped"], utc=True, errors="coerce").astype(
+        "datetime64[ns, UTC]"
+    )
     return df
 
 

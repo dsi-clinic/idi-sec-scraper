@@ -80,9 +80,7 @@ class TestFilingsToDf:
         result = _filings_to_df([_FILING])
         assert isinstance(result["date_scraped"].dtype, pd.DatetimeTZDtype)
         assert str(result["date_scraped"].dtype) == "datetime64[ns, UTC]"
-        assert result.iloc[0]["date_scraped"] == pd.Timestamp(
-            "2026-02-24T04:25:07.912991+00:00"
-        )
+        assert result.iloc[0]["date_scraped"] == pd.Timestamp("2026-02-24T04:25:07.912991+00:00")
 
     def test_empty_date_scraped_becomes_nat(self):
         filing = ScrapedFiling(

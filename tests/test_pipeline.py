@@ -649,9 +649,7 @@ class TestScrapeFiling:
         mock_logger = mocker.patch.object(pipeline, "logger")
         pipeline._scrape_filing(_FILING)
 
-        warnings = [
-            call.args[0] for call in mock_logger.warning.call_args_list if call.args
-        ]
+        warnings = [call.args[0] for call in mock_logger.warning.call_args_list if call.args]
         assert any("Known filing seen in daily index" in msg for msg in warnings)
 
     def test_known_filing_in_historical_run_does_not_warn(self, mocker):
@@ -669,9 +667,7 @@ class TestScrapeFiling:
         mock_logger = mocker.patch.object(pipeline, "logger")
         pipeline._scrape_filing(_FILING)
 
-        warnings = [
-            call.args[0] for call in mock_logger.warning.call_args_list if call.args
-        ]
+        warnings = [call.args[0] for call in mock_logger.warning.call_args_list if call.args]
         assert not any("Known filing seen in daily index" in msg for msg in warnings)
 
     def test_failed_document_fetch_increments_stat(self, mocker):
