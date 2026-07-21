@@ -1,8 +1,5 @@
 """Tests for processor.manifest."""
 
-# Standard library imports
-import datetime
-
 # Third party imports
 import pandas as pd
 from idi_ftm2j_shared.types import ScrapedDocument, ScrapedFiling
@@ -19,7 +16,6 @@ _FILING = ScrapedFiling(
     accession_number="0001140361-26-006577",
     form_type="8-K",
     filing_date="2026-02-24",
-    last_scraped_at=datetime.datetime(2026, 2, 24, tzinfo=datetime.UTC).isoformat(),
     index_url="https://www.sec.gov/Archives/edgar/data/320193/000114036126006577/0001140361-26-006577-index.htm",
     company_name="Apple Inc.",
     documents=[
@@ -30,6 +26,7 @@ _FILING = ScrapedFiling(
             type="8-K",
             s3_key="s3://test-bucket/2026-02-24/8-K/320193/000114036126006577/report.htm",
             url="https://www.sec.gov/Archives/edgar/data/320193/000114036126006577/report.htm",
+            date_scraped="2026-02-24T04:25:07.912991+00:00",
         ),
         ScrapedDocument(
             seq="2",
@@ -38,6 +35,7 @@ _FILING = ScrapedFiling(
             type="EX-99.1",
             s3_key="s3://test-bucket/2026-02-24/8-K/320193/000114036126006577/ex99.htm",
             url="https://www.sec.gov/Archives/edgar/data/320193/000114036126006577/ex99.htm",
+            date_scraped="2026-02-24T04:25:07.912991+00:00",
         ),
     ],
 )
@@ -47,7 +45,6 @@ _FILING_NO_DOCS = ScrapedFiling(
     accession_number="0000789019-26-000001",
     form_type="10-K",
     filing_date="2026-01-15",
-    last_scraped_at=datetime.datetime(2026, 1, 15, tzinfo=datetime.UTC).isoformat(),
     index_url="https://www.sec.gov/Archives/edgar/data/789019/000078901926000001/0000789019-26-000001-index.htm",
     company_name="Microsoft Corp.",
     documents=[],
@@ -71,7 +68,43 @@ class TestFilingsToDf:
             "type",
             "s3_key",
             "url",
+            "date_scraped",
         ]
+
+    def test_empty_list_date_scraped_is_datetime_utc(self):
+        result = _filings_to_df([])
+        assert isinstance(result["date_scraped"].dtype, pd.DatetimeTZDtype)
+        assert str(result["date_scraped"].dtype) == "datetime64[ns, UTC]"
+
+    def test_date_scraped_column_is_datetime_utc(self):
+        result = _filings_to_df([_FILING])
+        assert isinstance(result["date_scraped"].dtype, pd.DatetimeTZDtype)
+        assert str(result["date_scraped"].dtype) == "datetime64[ns, UTC]"
+        assert result.iloc[0]["date_scraped"] == pd.Timestamp("2026-02-24T04:25:07.912991+00:00")
+
+    def test_empty_date_scraped_becomes_nat(self):
+        filing = ScrapedFiling(
+            cik="320193",
+            accession_number="0001140361-26-006577",
+            form_type="8-K",
+            filing_date="2026-02-24",
+            index_url="https://example.com/index.htm",
+            company_name="Apple Inc.",
+            documents=[
+                ScrapedDocument(
+                    seq="1",
+                    description="8-K",
+                    filename="report.htm",
+                    type="8-K",
+                    s3_key="s3://test-bucket/report.htm",
+                    url="https://example.com/report.htm",
+                    date_scraped="",
+                )
+            ],
+        )
+        result = _filings_to_df([filing])
+        assert pd.isna(result.iloc[0]["date_scraped"])
+        assert str(result["date_scraped"].dtype) == "datetime64[ns, UTC]"
 
     def test_filing_with_no_documents_produces_no_rows(self):
         result = _filings_to_df([_FILING_NO_DOCS])
@@ -102,7 +135,6 @@ class TestFilingsToDf:
             accession_number="0001111111-26-000001",
             form_type="8-K",
             filing_date="2026-03-01",
-            last_scraped_at="2026-03-01T00:00:00+00:00",
             index_url="https://example.com/index.htm",
             company_name="Acme Corp.",
             documents=[
@@ -113,6 +145,7 @@ class TestFilingsToDf:
                     type="8-K",
                     s3_key="s3://test-bucket/2026-03-01/8-K/111111/000111111126000001/form.htm",
                     url="https://example.com/form.htm",
+                    date_scraped="2026-03-01T00:00:00+00:00",
                 )
             ],
         )

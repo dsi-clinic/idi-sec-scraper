@@ -95,11 +95,6 @@ class TestNewScrapedFiling:
         assert result.filing_date == "2026-02-24"
         assert result.documents == []
 
-    def test_last_scraped_at_is_utc_iso_string(self):
-        result = _new_scraped_filing(_FILING)
-        dt = datetime.datetime.fromisoformat(result.last_scraped_at)
-        assert dt.tzinfo == datetime.UTC
-
     def test_index_url_and_company_name_from_discovered_filing(self):
         result = _new_scraped_filing(_FILING)
         assert result.index_url == _FILING.url
@@ -283,7 +278,6 @@ def _make_parsed_filing(docs: list[ParsedDocument]) -> ParsedFiling:
         form_type=_FILING.form_type,
         filing_date=datetime.date(2026, 2, 24),
         report_date=datetime.date(2026, 2, 24),
-        last_scraped_at=datetime.datetime.now(datetime.UTC),
         available_documents=docs,
     )
 
@@ -293,7 +287,6 @@ _DEFAULT_SCRAPED_FILING = ScrapedFiling(
     accession_number=_FILING.accession_number,
     form_type=_FILING.form_type,
     filing_date=str(_FILING.filing_date),
-    last_scraped_at="2026-02-24T00:00:00+00:00",
     index_url=_FILING.url,
     company_name=_FILING.company_name,
     documents=[],
@@ -529,6 +522,33 @@ class TestScrapeFiling:
         saved_paths = [call.args[0] for call in mock_save.call_args_list]
         assert any("report.htm" in p for p in saved_paths)
 
+    def test_newly_fetched_document_gets_utc_iso_date_scraped(self, mocker):
+        doc = ParsedDocument(
+            seq="1",
+            description="8-K",
+            filename="report.htm",
+            type="8-K",
+            url="https://www.sec.gov/Archives/edgar/data/320193/000114036126006577/report.htm",
+        )
+        _patch_scrape_deps(mocker, docs=[doc])
+        pipeline = _make_pipeline(
+            mocker,
+            DailySECScraperPipeline,
+            DailyPipelineConfig(
+                bucket=_BUCKET,
+                document_filters_path=_FILTERS_PATH,
+            ),
+        )
+        pipeline.sec_client.query_endpoint.return_value = {"status_code": 200, "data": "<html/>"}
+        result = pipeline._scrape_filing(_FILING)
+
+        assert result is not None
+        scraped_filing, _ = result
+        assert len(scraped_filing.documents) == 1
+        date_scraped = scraped_filing.documents[0].date_scraped
+        parsed = datetime.datetime.fromisoformat(date_scraped)
+        assert parsed.tzinfo == datetime.UTC
+
     def test_document_in_manifest_is_skipped(self, mocker):
         doc = ParsedDocument(
             seq="1",
@@ -545,7 +565,6 @@ class TestScrapeFiling:
                 accession_number=_FILING.accession_number,
                 form_type=_FILING.form_type,
                 filing_date=str(_FILING.filing_date),
-                last_scraped_at="2026-02-24T00:00:00+00:00",
                 index_url=_FILING.url,
                 company_name=_FILING.company_name,
                 documents=[
@@ -556,6 +575,7 @@ class TestScrapeFiling:
                         type="8-K",
                         s3_key="s3://bucket/report.htm",
                         url="https://www.sec.gov/Archives/edgar/data/320193/000114036126006577/report.htm",
+                        date_scraped="2026-02-24T00:00:00+00:00",
                     )
                 ],
             ),
@@ -569,10 +589,14 @@ class TestScrapeFiling:
                 submissions_url="s3://x/s.zip",
             ),
         )
-        pipeline._scrape_filing(_FILING)
+        result = pipeline._scrape_filing(_FILING)
 
         assert pipeline.stats.skipped_documents == 1
         assert pipeline.sec_client.query_endpoint.call_count == 0
+        # A skipped (already-present) document retains its prior date_scraped.
+        assert result is not None
+        scraped_filing, _ = result
+        assert scraped_filing.documents[0].date_scraped == "2026-02-24T00:00:00+00:00"
 
     def test_reads_from_s3_when_manifest_cached_historical(self, mocker):
         _patch_scrape_deps(mocker, cached=True)
@@ -610,6 +634,41 @@ class TestScrapeFiling:
 
         mock_load_content.assert_called_once()
         pipeline.sec_client.query_endpoint.assert_not_called()
+
+    def test_known_filing_in_daily_index_logs_warning(self, mocker):
+        _patch_scrape_deps(mocker, cached=True)
+        mocker.patch("idi_sec_scraper.pipeline.load_content", return_value=b"<html/>")
+        pipeline = _make_pipeline(
+            mocker,
+            DailySECScraperPipeline,
+            DailyPipelineConfig(
+                bucket=_BUCKET,
+                document_filters_path=_FILTERS_PATH,
+            ),
+        )
+        mock_logger = mocker.patch.object(pipeline, "logger")
+        pipeline._scrape_filing(_FILING)
+
+        warnings = [call.args[0] for call in mock_logger.warning.call_args_list if call.args]
+        assert any("Known filing seen in daily index" in msg for msg in warnings)
+
+    def test_known_filing_in_historical_run_does_not_warn(self, mocker):
+        _patch_scrape_deps(mocker, cached=True)
+        mocker.patch("idi_sec_scraper.pipeline.load_content", return_value=b"<html/>")
+        pipeline = _make_pipeline(
+            mocker,
+            HistoricalSECScraperPipeline,
+            HistoricalPipelineConfig(
+                bucket=_BUCKET,
+                document_filters_path=_FILTERS_PATH,
+                submissions_url="s3://x/s.zip",
+            ),
+        )
+        mock_logger = mocker.patch.object(pipeline, "logger")
+        pipeline._scrape_filing(_FILING)
+
+        warnings = [call.args[0] for call in mock_logger.warning.call_args_list if call.args]
+        assert not any("Known filing seen in daily index" in msg for msg in warnings)
 
     def test_failed_document_fetch_increments_stat(self, mocker):
         doc = ParsedDocument(
@@ -953,7 +1012,6 @@ class TestProcess:
                 accession_number=_FILING.accession_number,
                 form_type=_FILING.form_type,
                 filing_date=str(_FILING.filing_date),
-                last_scraped_at="2026-02-24T00:00:00+00:00",
                 index_url=_FILING.url,
                 company_name=_FILING.company_name,
                 documents=[
@@ -964,6 +1022,7 @@ class TestProcess:
                         type="8-K",
                         s3_key="s3://bucket/report.htm",
                         url=_DOC.url,
+                        date_scraped="2026-02-24T00:00:00+00:00",
                     )
                 ],
             ),

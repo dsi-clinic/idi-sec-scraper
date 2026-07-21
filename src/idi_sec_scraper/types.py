@@ -29,7 +29,6 @@ class ParsedFiling:
     form_type: str
     filing_date: datetime.date | None
     report_date: datetime.date | None
-    last_scraped_at: datetime.datetime
     available_documents: list[ParsedDocument] = field(default_factory=list)
 
 

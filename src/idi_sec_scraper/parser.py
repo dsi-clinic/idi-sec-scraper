@@ -43,7 +43,6 @@ def parse_index_htm(html: str, filing: DiscoveredFiling) -> tuple[ParsedFiling, 
         form_type=_extract_form_type(soup),
         filing_date=_parse_date(_extract_info_field(soup, "Filing Date")),
         report_date=_parse_date(_extract_info_field(soup, "Period of Report")),
-        last_scraped_at=datetime.datetime.now(datetime.UTC),
         available_documents=_extract_documents(soup),
     )
     return parsed, validate_parsed_filing(parsed, filing)

@@ -47,7 +47,6 @@ def _new_scraped_filing(filing: DiscoveredFiling) -> ScrapedFiling:
         accession_number=filing.accession_number,
         form_type=filing.form_type,
         filing_date=filing.filing_date.isoformat(),
-        last_scraped_at=datetime.datetime.now(datetime.UTC).isoformat(),
         index_url=filing.url,
         company_name=filing.company_name,
         documents=[],
@@ -107,6 +106,12 @@ class Pipeline(ABC):
 
 class SECScraperPipeline(Pipeline, ABC):
     """Pipeline that fetches SEC filings and stores content and manifests in S3."""
+
+    # Daily runs warn when a filing that has already been scraped (its manifest
+    # is present in S3) reappears in the daily index — an unexpected re-listing
+    # worth surfacing. Historical runs re-process cached filings by design and
+    # stay silent.
+    _warn_on_known_filing: bool = False
 
     def __init__(self, config: PipelineConfig, sec_client: SecClient) -> None:
         """Initialize the pipeline and create the discovery instance.
@@ -277,6 +282,13 @@ class SECScraperPipeline(Pipeline, ABC):
         filing_index_s3_key = f"{prefix}/index.htm"
 
         if key_exists(filing_manifest_s3_key):
+            if self._warn_on_known_filing:
+                self.logger.warning(
+                    "Known filing seen in daily index: %s / %s (form=%s)",
+                    filing.cik,
+                    filing.accession_number,
+                    filing.form_type,
+                )
             index_html = load_content(filing_index_s3_key).decode()
             scraped_filing = get_filing(
                 filing.form_type,
@@ -352,7 +364,6 @@ class SECScraperPipeline(Pipeline, ABC):
                 filing.accession_number,
             )
             scraped_filing.failure_reason = str(failure_type)
-            scraped_filing.last_scraped_at = datetime.datetime.now(datetime.UTC).isoformat()
             save_json(f"{prefix}/manifest.json", dataclasses.asdict(scraped_filing))
             self.failure_registry.add(failure_key, failure_type)
             return None
@@ -378,7 +389,6 @@ class SECScraperPipeline(Pipeline, ABC):
                 filing.accession_number,
             )
             scraped_filing.failure_reason = str(FailureType.DOCUMENTS_MISSING)
-            scraped_filing.last_scraped_at = datetime.datetime.now(datetime.UTC).isoformat()
             save_json(f"{prefix}/manifest.json", dataclasses.asdict(scraped_filing))
             self.failure_registry.add(failure_key, FailureType.DOCUMENTS_MISSING)
             return None
@@ -426,6 +436,7 @@ class SECScraperPipeline(Pipeline, ABC):
                     type=doc.type,
                     s3_key=doc_s3_url,
                     url=doc.url,
+                    date_scraped=datetime.datetime.now(datetime.UTC).isoformat(),
                 )
             )
             self.stats.increment("scraped_documents")
@@ -433,7 +444,6 @@ class SECScraperPipeline(Pipeline, ABC):
 
         was_fully_cached = index_was_cached and new_doc_count == 0 and failed_doc_count == 0
         if not was_fully_cached:
-            scraped_filing.last_scraped_at = datetime.datetime.now(datetime.UTC).isoformat()
             save_json(f"{prefix}/manifest.json", dataclasses.asdict(scraped_filing))
         return scraped_filing, was_fully_cached
 
@@ -470,6 +480,8 @@ class HistoricalSECScraperPipeline(SECScraperPipeline):
 
 class DailySECScraperPipeline(SECScraperPipeline):
     """Pipeline for daily runs, discovering filings from daily crawler indexes."""
+
+    _warn_on_known_filing: bool = True
 
     def _make_discovery(self) -> DailyDiscovery:
         """Create a DailyDiscovery instance from config and filter patterns."""
