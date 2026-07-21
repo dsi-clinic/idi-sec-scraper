@@ -84,7 +84,7 @@ def update_bucket_manifest(bucket: str, filings: list[ScrapedFiling]) -> None:
     try:
         existing_df = pd.read_parquet(manifest_path)
     except FileNotFoundError:
-        existing_df = pd.DataFrame(columns=_MANIFEST_COLUMNS)
+        existing_df = _filings_to_df([])
 
     combined = pd.concat([existing_df, new_df], ignore_index=True)
     combined = combined.drop_duplicates(subset=["s3_key"], keep="last")
