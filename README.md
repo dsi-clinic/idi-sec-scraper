@@ -353,7 +353,7 @@ for manifest in iter_manifests("8-K", start=date(2024, 1, 1), end=date(2024, 12,
 
 ## AWS ECS Architecture
 
-For more information on the development cycle, see the [idi-ftm2j-shared documentation](https://github.com/dsi-clinic/idi-ftm2j-shared#development-cycle) that is used by all processors.
+For more information on the development cycle, see the [idi-ftm2j-shared documentation](https://github.com/dsi-rse/idi-ftm2j-shared#development-cycle) that is used by all processors.
 
 The scraper runs as an **ECS Fargate task** scheduled by **EventBridge Scheduler**. Infrastructure is defined in `pulumi/` using Pulumi (Python).
 
