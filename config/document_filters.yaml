@@ -43,14 +43,20 @@ form_types:
             operator: exact
             value: "Complete submission text file"
 
-  6-K:
+
+
+  6-K: 
     match: '6-K'
     cutoff_date: '2016-01-01'
     documents:
       - all_of:
-          - field: description
-            operator: exact
-            value: "Complete submission text file"
+          - field: type
+            operator: regex
+            value: '^6-K'
+      - all_of:
+          - field: type
+            operator: regex
+            value: 'EX-(?!101)'
 
   13F-HR:
     match: '13F-HR'
