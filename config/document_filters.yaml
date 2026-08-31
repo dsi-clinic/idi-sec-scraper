@@ -43,7 +43,7 @@ form_types:
             operator: exact
             value: "Complete submission text file"
 
-  8-K:
+  6-K:
     match: '6-K'
     cutoff_date: '2016-01-01'
     documents:
